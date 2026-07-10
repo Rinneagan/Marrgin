@@ -5,7 +5,7 @@ import FollowButton from "@/components/FollowButton";
 import BookmarkButton from "@/components/BookmarkButton";
 import LikeButton from "@/components/LikeButton";
 import CommentsSection from "@/components/CommentsSection";
-import { getPoemById, Poem, CommentData, getComments, togglePoemLike, checkIsPoemLiked, toggleBookmark, checkIsBookmarked, trackPoemRead, createPlaylist, saveToPlaylist, getUserProfile } from "@/lib/db";
+import { getPoemById, Poem, CommentData, getComments, togglePoemLike, checkIsPoemLiked, toggleBookmark, checkIsBookmarked, trackPoemRead, getCollectionsForUser, createCollection, addPoemToCollection, Collection } from "@/lib/db";
 import Link from "next/link";
 import { motion, useScroll, useSpring, AnimatePresence } from "framer-motion";
 import { useZenMode } from "@/context/ZenContext";
@@ -49,6 +49,12 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
   const poemRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   
+  // Anthologies / Collections
+  const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+
   // Progress bar animation
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
@@ -230,25 +236,41 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
   };
 
   const handleSaveToPlaylist = async () => {
-    if (!user || !poem) return;
+    if (!user || !poem) {
+      alert("Please sign in to save poems.");
+      return;
+    }
+    const userCollections = await getCollectionsForUser(user.uid);
+    setCollections(userCollections);
+    setIsCollectionModalOpen(true);
+  };
+
+  const handleAddToCollection = async (collectionId: string) => {
+    if (!poem) return;
     try {
-      const profile = await getUserProfile(user.uid) as any;
-      let playlistId;
-      if (profile && profile.playlists && profile.playlists.length > 0) {
-        playlistId = profile.playlists[0].id;
-      } else {
-        const newPlaylist = await createPlaylist(user.uid, "My Favorites");
-        playlistId = newPlaylist?.id;
-      }
-      
-      if (playlistId) {
-        await saveToPlaylist(user.uid, playlistId, poem.id);
-        alert("Saved to playlist!");
-      }
+      await addPoemToCollection(collectionId, poem.id);
+      setIsCollectionModalOpen(false);
     } catch (e) {
       console.error(e);
     }
   };
+
+  const handleCreateAndAddCollection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !poem || !newCollectionName.trim()) return;
+    setIsCreatingCollection(true);
+    try {
+      const newColId = await createCollection(user.uid, user.displayName || "Unknown", newCollectionName);
+      await addPoemToCollection(newColId, poem.id);
+      setIsCollectionModalOpen(false);
+      setNewCollectionName("");
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsCreatingCollection(false);
+    }
+  };
+
 
   return (
     <>
@@ -372,10 +394,19 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         </div>
 
         <div className={`mb-16 transition-opacity duration-1000 ${isZenMode ? "opacity-20 hover:opacity-100" : "opacity-100"}`}>
+          {poem.coverImage && (
+            <div className="w-full h-[40vh] md:h-[50vh] relative mb-12 rounded-xl overflow-hidden shadow-2xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={poem.coverImage} alt="Cover Art" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#fdfbf7] dark:from-[#0a0a0a] to-transparent"></div>
+            </div>
+          )}
           <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl mb-4 leading-tight">{poem.title || "Untitled"}</h1>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <p className="text-xl text-secondary">by {poem.authorName}</p>
+              <Link href={`/user/${poem.authorId}`} className="text-xl text-secondary hover:text-black dark:hover:text-white transition-colors">
+                by {poem.authorName}
+              </Link>
               <FollowButton authorId={poem.authorId} />
             </div>
             <div className="flex items-center gap-6">
@@ -383,14 +414,14 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
               <BookmarkButton poemId={poem.id} />
             </div>
           </div>
-          <div className="mt-8 text-sm text-gray-400 uppercase tracking-widest">
-            {Math.max(1, Math.ceil(poem.content.length / 500))} min read
+          <div className="mt-8 text-sm text-gray-400 uppercase tracking-widest flex items-center gap-4">
+            <span>{Math.max(1, Math.ceil(poem.content.length / 500))} min read</span>
             <button 
               onClick={handleSaveToPlaylist}
               className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white`}
             >
               <ListPlus size={18} />
-              <span className="text-sm font-medium">Save to Playlist</span>
+              <span className="text-sm font-medium">Save to Anthology</span>
             </button>
           </div>
         </div>
@@ -405,8 +436,12 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         >
           <div className="text-center mb-16">
             <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl mb-6">{poem.title}</h1>
-            <p className="text-secondary font-medium tracking-widest uppercase text-sm">
-              By {poem.authorName} • {poem.createdAt?.toDate().toLocaleDateString()}
+            <p className="text-secondary font-medium tracking-widest uppercase text-sm flex items-center justify-center gap-2">
+              <span>By</span>
+              <Link href={`/user/${poem.authorId}`} className="hover:text-black dark:hover:text-white transition-colors hover:underline">
+                {poem.authorName}
+              </Link>
+              <span>• {poem.createdAt?.toDate().toLocaleDateString()}</span>
             </p>
           </div>
 
@@ -514,6 +549,73 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         onClose={() => setSelectedLineIndex(null)}
         onRefresh={fetchCommentsData}
       />
+
+      {/* Save to Collection Modal */}
+      <AnimatePresence>
+        {isCollectionModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCollectionModalOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl"
+            >
+              <h2 className="font-serif text-3xl mb-2">Save to Anthology</h2>
+              <p className="text-secondary mb-6">Choose a collection to save "{poem.title}" to.</p>
+
+              {collections.length > 0 ? (
+                <div className="space-y-2 mb-6 max-h-[40vh] overflow-y-auto">
+                  {collections.map(col => (
+                    <button
+                      key={col.id}
+                      onClick={() => handleAddToCollection(col.id)}
+                      className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-black dark:hover:border-white transition-colors flex justify-between items-center"
+                    >
+                      <span className="font-medium">{col.title}</span>
+                      <span className="text-xs text-secondary">{col.poemIds.length} poems</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-secondary mb-6 text-sm">You don't have any anthologies yet.</p>
+              )}
+
+              <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+                <form onSubmit={handleCreateAndAddCollection} className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newCollectionName}
+                    onChange={e => setNewCollectionName(e.target.value)}
+                    placeholder="New Anthology Name..."
+                    className="flex-1 bg-transparent border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2 focus:outline-none focus:border-black dark:focus:border-white text-sm"
+                  />
+                  <button 
+                    type="submit"
+                    disabled={!newCollectionName.trim() || isCreatingCollection}
+                    className="bg-black text-white dark:bg-white dark:text-black px-4 py-2 rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    Create & Add
+                  </button>
+                </form>
+              </div>
+
+              <button 
+                onClick={() => setIsCollectionModalOpen(false)}
+                className="mt-6 w-full py-3 rounded-xl text-secondary hover:text-black dark:hover:text-white font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

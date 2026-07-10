@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { createPoem, getUserProfile } from "@/lib/db";
 import { useRouter } from "next/navigation";
 import { Lock, Type, Fingerprint, Activity, Ghost, UserCircle, Scissors, FileSearch } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Simple syllable counter
 const countSyllables = (word: string) => {
@@ -57,6 +57,11 @@ export default function WritePage() {
   const [isRhymeMode, setIsRhymeMode] = useState(false);
   const [isBlackoutMode, setIsBlackoutMode] = useState(false);
   const [blackoutIndices, setBlackoutIndices] = useState<Set<number>>(new Set());
+  
+  // Phase 13 Features
+  const [coverImagePrompt, setCoverImagePrompt] = useState("");
+  const [coverImage, setCoverImage] = useState("");
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   
   // Phase 8 Features
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -123,7 +128,8 @@ export default function WritePage() {
         footnote.trim(),
         dedication.trim(),
         afterword.trim(),
-        location.trim()
+        location.trim(),
+        coverImage
       );
       
       if (isVaulted) {
@@ -200,12 +206,81 @@ export default function WritePage() {
     }));
   };
 
+  const handleGenerateCover = async () => {
+    if (!coverImagePrompt.trim()) return;
+    setIsGeneratingImage(true);
+    try {
+      // Use pollinations.ai for free no-key AI image generation
+      // Append a random seed to avoid browser caching if they generate multiple times
+      const seed = Math.floor(Math.random() * 1000000);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(coverImagePrompt)}?seed=${seed}&width=1200&height=800&nologo=true`;
+      
+      // We can pre-load the image to ensure it's ready before showing it
+      const img = new Image();
+      img.src = url;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      
+      setCoverImage(url);
+    } catch (e) {
+      console.error("Failed to generate image", e);
+      alert("Failed to generate cover image. Please try again.");
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
   return (
-    <div className="py-12 px-8 max-w-[1200px] mx-auto min-h-screen flex flex-col md:flex-row gap-12">
-      <div className="flex-1 flex flex-col">
-        <div className="flex justify-between items-center mb-8">
-        <h1 className="font-serif text-3xl text-gray-400">New Poem</h1>
-        <div className="flex items-center gap-6">
+    <>
+      <AnimatePresence>
+        {isTypewriterMode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8 }}
+            className="fixed inset-0 z-[100] bg-[#fdfbf7] dark:bg-[#0a0a0a] flex flex-col items-center justify-center overflow-hidden"
+          >
+            <div className="absolute top-8 right-8 z-[101]">
+              <button 
+                onClick={() => setIsTypewriterMode(false)}
+                className="opacity-0 hover:opacity-100 transition-opacity duration-300 px-6 py-2 border border-gray-300 dark:border-gray-800 rounded-full font-mono text-sm text-gray-500 hover:text-black dark:hover:text-white"
+              >
+                Exit Typewriter Mode
+              </button>
+            </div>
+            
+            <div className="w-full max-w-[800px] h-[60vh] relative flex flex-col justify-center">
+              {/* Typewriter specific textarea */}
+              <textarea
+                autoFocus
+                placeholder="Start typing..."
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-transparent outline-none resize-none placeholder:text-gray-300 dark:placeholder:text-gray-800 leading-[3rem] text-3xl md:text-4xl"
+                style={{ 
+                  fontFamily: '"Courier New", Courier, monospace',
+                  color: 'inherit',
+                  height: '100%',
+                  textAlign: 'center'
+                }}
+              />
+            </div>
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 opacity-20 pointer-events-none font-mono text-xs">
+              NO BACKSPACE. JUST WRITE.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="py-12 px-8 max-w-[1200px] mx-auto min-h-screen flex flex-col md:flex-row gap-12">
+        <div className="flex-1 flex flex-col">
+          <div className="flex justify-between items-center mb-8">
+          <h1 className="font-serif text-3xl text-gray-400">New Poem</h1>
+          <div className="flex items-center gap-6">
           <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary hover:text-black dark:hover:text-white transition-colors">
             <input 
               type="checkbox" 
@@ -425,6 +500,39 @@ export default function WritePage() {
           </label>
         </div>
 
+        <h2 className="font-serif text-xl text-gray-400 uppercase tracking-widest mt-4">Cover Art</h2>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <input
+              type="text"
+              placeholder="e.g. A melancholic rainy city in watercolor"
+              className="w-full bg-transparent border-b border-gray-200 dark:border-gray-800 py-2 outline-none text-sm placeholder:text-gray-400"
+              value={coverImagePrompt}
+              onChange={e => setCoverImagePrompt(e.target.value)}
+            />
+            <button
+              onClick={handleGenerateCover}
+              disabled={isGeneratingImage || !coverImagePrompt.trim()}
+              className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
+            >
+              {isGeneratingImage ? "Generating..." : "Generate AI Cover"}
+            </button>
+          </div>
+          {coverImage && (
+            <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 mt-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={coverImage} alt="Cover Preview" className="w-full h-full object-cover" />
+              <button 
+                onClick={() => setCoverImage("")}
+                className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black/80 transition-colors"
+              >
+                &times;
+              </button>
+            </div>
+          )}
+        </div>
+
+
         <h2 className="font-serif text-xl text-gray-400 uppercase tracking-widest mt-4">Arsenal</h2>
         
         <div className="flex flex-col gap-4">
@@ -527,5 +635,6 @@ export default function WritePage() {
         )}
       </div>
     </div>
+    </>
   );
 }

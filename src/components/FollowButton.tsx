@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { checkIsFollowing, toggleFollow as toggleFollowDb } from "@/lib/db";
+import { checkIsFollowing, toggleFollowUser as toggleFollowDb } from "@/lib/db";
 
 export default function FollowButton({
   authorId,

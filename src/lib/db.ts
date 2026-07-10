@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, updateDoc, collection, addDoc, getDocs, query, where, orderBy, limit, deleteDoc, increment, writeBatch } from "firebase/firestore";
 
 export const createUserProfile = async (uid: string, email: string, username: string) => {
   if (!uid) return;
@@ -57,30 +57,102 @@ export const updatePenNames = async (uid: string, penNames: string[], currentPen
   });
 };
 
-export const createPlaylist = async (uid: string, name: string) => {
-  const userRef = doc(db, "users", uid);
-  const userDoc = await getDoc(userRef);
-  if (!userDoc.exists()) return;
-  const currentPlaylists = userDoc.data().playlists || [];
-  const newPlaylist = { id: Date.now().toString(), name, poemIds: [] };
-  await updateDoc(userRef, {
-    playlists: [...currentPlaylists, newPlaylist]
-  });
-  return newPlaylist;
+export const toggleFollowUser = async (followerId: string, targetUserId: string, isFollowing: boolean) => {
+  if (followerId === targetUserId) return; // Can't follow self
+
+  const followerFollowingRef = doc(db, "users", followerId, "following", targetUserId);
+  const targetFollowerRef = doc(db, "users", targetUserId, "followers", followerId);
+  const followerUserRef = doc(db, "users", followerId);
+  const targetUserRef = doc(db, "users", targetUserId);
+
+  const batch = writeBatch(db);
+
+  if (isFollowing) {
+    batch.delete(followerFollowingRef);
+    batch.delete(targetFollowerRef);
+    batch.update(followerUserRef, { followingCount: increment(-1) });
+    batch.update(targetUserRef, { followersCount: increment(-1) });
+  } else {
+    batch.set(followerFollowingRef, { followedAt: serverTimestamp() });
+    batch.set(targetFollowerRef, { followedAt: serverTimestamp() });
+    batch.update(followerUserRef, { followingCount: increment(1) });
+    batch.update(targetUserRef, { followersCount: increment(1) });
+  }
+
+  await batch.commit();
 };
 
-export const saveToPlaylist = async (uid: string, playlistId: string, poemId: string) => {
-  const userRef = doc(db, "users", uid);
-  const userDoc = await getDoc(userRef);
-  if (!userDoc.exists()) return;
-  const currentPlaylists = userDoc.data().playlists || [];
-  const updatedPlaylists = currentPlaylists.map((p: any) => {
-    if (p.id === playlistId && !p.poemIds.includes(poemId)) {
-      return { ...p, poemIds: [...p.poemIds, poemId] };
-    }
-    return p;
+export const checkIsFollowing = async (followerId: string, targetUserId: string) => {
+  if (!followerId || !targetUserId) return false;
+  const followerFollowingRef = doc(db, "users", followerId, "following", targetUserId);
+  const snapshot = await getDoc(followerFollowingRef);
+  return snapshot.exists();
+};
+
+
+export interface Collection {
+  id: string;
+  authorId: string;
+  authorName: string;
+  title: string;
+  description: string;
+  coverImage: string;
+  poemIds: string[];
+  followersCount: number;
+  isPublic: boolean;
+  createdAt: any;
+}
+
+export const createCollection = async (authorId: string, authorName: string, title: string, description: string = "", isPublic: boolean = true) => {
+  const collectionsRef = collection(db, "collections");
+  // Fetch a random aesthetic image from Unsplash Source
+  // Using keywords related to poetry, night, moody
+  const coverImage = `https://images.unsplash.com/photo-1476231682828-37e571bc172f?q=80&w=800&auto=format&fit=crop`; // A fallback, but we can randomize
+  // Actually, Unsplash Source API is deprecated, but we can use unsplash source random url:
+  const randomImageId = Math.floor(Math.random() * 1000);
+  const dynamicCover = `https://source.unsplash.com/random/800x600/?poetry,moody,dark&sig=${randomImageId}`;
+
+  const docRef = await addDoc(collectionsRef, {
+    authorId,
+    authorName,
+    title,
+    description,
+    coverImage: dynamicCover,
+    poemIds: [],
+    followersCount: 0,
+    isPublic,
+    createdAt: serverTimestamp()
   });
-  await updateDoc(userRef, { playlists: updatedPlaylists });
+  
+  return docRef.id;
+};
+
+export const addPoemToCollection = async (collectionId: string, poemId: string) => {
+  const collectionRef = doc(db, "collections", collectionId);
+  const snapshot = await getDoc(collectionRef);
+  if (!snapshot.exists()) return;
+  const currentPoems = snapshot.data().poemIds || [];
+  if (!currentPoems.includes(poemId)) {
+    await updateDoc(collectionRef, {
+      poemIds: [...currentPoems, poemId]
+    });
+  }
+};
+
+export const getCollectionsForUser = async (uid: string) => {
+  const collectionsRef = collection(db, "collections");
+  const q = query(collectionsRef, where("authorId", "==", uid), orderBy("createdAt", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Collection));
+};
+
+export const getCollectionById = async (id: string) => {
+  const collectionRef = doc(db, "collections", id);
+  const snapshot = await getDoc(collectionRef);
+  if (snapshot.exists()) {
+    return { id: snapshot.id, ...snapshot.data() } as Collection;
+  }
+  return null;
 };
 
 // Track Poem Read Analytics
@@ -115,7 +187,6 @@ export const getVaultedPoems = async (passphrase: string) => {
 };
 
 // --- Poems ---
-import { collection, addDoc, query, orderBy, getDocs, limit, where, deleteDoc } from "firebase/firestore";
 
 export interface Poem {
   id: string;
@@ -141,6 +212,7 @@ export interface Poem {
   dedication?: string;
   afterword?: string;
   location?: string;
+  coverImage?: string;
 }
 
 export const createPoem = async (
@@ -160,7 +232,8 @@ export const createPoem = async (
   footnote?: string,
   dedication?: string,
   afterword?: string,
-  location?: string
+  location?: string,
+  coverImage?: string
 ) => {
   const poemsRef = collection(db, "poems");
   const finalAuthorName = isAnonymous ? "Ghost Writer" : authorName;
@@ -184,6 +257,7 @@ export const createPoem = async (
     dedication: dedication || "",
     afterword: afterword || "",
     location: location || "",
+    coverImage: coverImage || "",
     readsCount: 0,
     totalReadTime: 0,
     completionsCount: 0,
@@ -207,6 +281,49 @@ export const getLatestPoems = async (limitCount = 20) => {
     .map(doc => ({ id: doc.id, ...doc.data() } as Poem))
     .filter(poem => !poem.isVaulted)
     .sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+};
+
+export const getPoemsByUser = async (authorId: string) => {
+  const poemsRef = collection(db, "poems");
+  const q = query(poemsRef, where("authorId", "==", authorId), orderBy("createdAt", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs
+    .map(doc => ({ id: doc.id, ...doc.data() } as Poem))
+    .filter(poem => !poem.isVaulted);
+};
+
+export const getFollowingPoems = async (followerId: string, limitCount = 30) => {
+  // First, fetch the list of followed users
+  const followingRef = collection(db, "users", followerId, "following");
+  const followingSnap = await getDocs(followingRef);
+  const followedUserIds = followingSnap.docs.map(doc => doc.id);
+
+  if (followedUserIds.length === 0) return [];
+
+  // Firestore allows 'in' queries up to 10 items.
+  // We'll chunk them if there are more than 10.
+  const chunks = [];
+  for (let i = 0; i < followedUserIds.length; i += 10) {
+    chunks.push(followedUserIds.slice(i, i + 10));
+  }
+
+  const poemsRef = collection(db, "poems");
+  let allPoems: Poem[] = [];
+
+  for (const chunk of chunks) {
+    const q = query(
+      poemsRef, 
+      where("authorId", "in", chunk),
+      where("isVaulted", "==", false),
+      limit(limitCount)
+    );
+    const snap = await getDocs(q);
+    const poems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Poem));
+    allPoems = [...allPoems, ...poems];
+  }
+
+  // Sort locally across all chunks
+  return allPoems.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()).slice(0, limitCount);
 };
 
 export const getPoemById = async (id: string) => {
@@ -305,29 +422,8 @@ export const getBookmarkedPoems = async (userId: string) => {
   return poems.filter(p => p !== null) as Poem[];
 };
 
-// --- Follows ---
-export const toggleFollow = async (currentUserId: string, targetUserId: string, isFollowing: boolean) => {
-  if (currentUserId === targetUserId) return;
-  const followRef = doc(db, "users", currentUserId, "following", targetUserId);
-  const followerRef = doc(db, "users", targetUserId, "followers", currentUserId);
-  
-  if (isFollowing) {
-    await deleteDoc(followRef);
-    await deleteDoc(followerRef);
-  } else {
-    await setDoc(followRef, { createdAt: serverTimestamp() });
-    await setDoc(followerRef, { createdAt: serverTimestamp() });
-  }
-};
-
-export const checkIsFollowing = async (currentUserId: string, targetUserId: string) => {
-  const followRef = doc(db, "users", currentUserId, "following", targetUserId);
-  const snapshot = await getDoc(followRef);
-  return snapshot.exists();
-};
-
+// Removed duplicate follow logic
 // --- Likes ---
-import { increment, writeBatch } from "firebase/firestore";
 
 export const togglePoemLike = async (userId: string, poemId: string, isLiked: boolean) => {
   const likeRef = doc(db, "poems", poemId, "likes", userId);
