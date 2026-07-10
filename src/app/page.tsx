@@ -1,7 +1,7 @@
 "use client";
 
 import Navbar from "@/components/Navbar";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRef, useState, useEffect } from "react";
 
@@ -76,10 +76,18 @@ export default function Home() {
   const containerRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: containerRef });
   const [randomQuote, setRandomQuote] = useState(quotes[0]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Pick a random quote after hydration to avoid SSR mismatch
     setRandomQuote(quotes[Math.floor(Math.random() * quotes.length)]);
+    
+    // Dismiss loading screen after 3.5 seconds
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 3500);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   // Parallax effects
@@ -88,7 +96,32 @@ export default function Home() {
   const watermarkY = useTransform(scrollYProgress, [0, 1], [0, -400]);
 
   return (
-    <div ref={containerRef} className="min-h-screen relative overflow-hidden bg-background dark:bg-dark">
+    <>
+      <AnimatePresence>
+        {isLoading && (
+          <motion.div
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.5, ease: "easeInOut" }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-background dark:bg-dark"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, filter: "blur(10px)" }}
+              animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, scale: 1.05, filter: "blur(10px)" }}
+              transition={{ duration: 1.5, ease: "easeInOut" }}
+              className="max-w-4xl mx-auto text-center px-8 relative z-20"
+            >
+              <p className="font-poem text-4xl md:text-6xl lg:text-7xl italic text-black dark:text-white mb-8 leading-tight">
+                "{randomQuote.text}"
+              </p>
+              <p className="text-xl text-secondary uppercase tracking-[0.3em]">— {randomQuote.author}</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div ref={containerRef} className={`min-h-screen relative overflow-hidden bg-background dark:bg-dark ${isLoading ? 'h-screen overflow-hidden' : ''}`}>
       {/* Background Watermark Parallax */}
       <motion.div 
         style={{ y: watermarkY }}
@@ -109,7 +142,7 @@ export default function Home() {
         >
           <motion.div 
             initial="hidden"
-            animate="visible"
+            animate={!isLoading ? "visible" : "hidden"}
             transition={{ staggerChildren: 0.08, delayChildren: 0.2 }}
             className="flex justify-center overflow-hidden mb-8 perspective-1000"
           >
@@ -127,7 +160,7 @@ export default function Home() {
 
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            animate={!isLoading ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             transition={{ delay: 1.5, duration: 1 }}
             className="text-xl md:text-2xl text-secondary max-w-2xl mx-auto mb-12"
           >
@@ -136,7 +169,7 @@ export default function Home() {
           
           <motion.div 
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            animate={!isLoading ? { opacity: 1 } : { opacity: 0 }}
             transition={{ delay: 2, duration: 1 }}
             className="flex gap-4 justify-center"
           >
@@ -213,25 +246,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Cinematic Quote Section */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden z-10">
-        <motion.div 
-          key={randomQuote.text} // Re-animate when quote changes (useful if we added an interval later)
-          initial={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
-          whileInView={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-          viewport={{ once: false, amount: 0.5 }}
-          transition={{ duration: 1.5, ease: "easeInOut" }}
-          className="max-w-4xl mx-auto text-center px-8 relative z-20"
-        >
-          <p className="font-poem text-4xl md:text-6xl lg:text-7xl italic text-black dark:text-white mb-8 leading-tight">
-            "{randomQuote.text}"
-          </p>
-          <p className="text-xl text-secondary uppercase tracking-[0.3em]">— {randomQuote.author}</p>
-        </motion.div>
-        
-        {/* Subtle background gradient overlay for the quote section */}
-        <div className="absolute inset-0 bg-gradient-to-t from-accent/5 to-transparent z-0" />
-      </section>
     </div>
+    </>
   );
 }
