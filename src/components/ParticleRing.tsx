@@ -54,7 +54,17 @@ export default function ParticleRing() {
       targetX = e.clientX;
       targetY = e.clientY;
     };
+    
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        targetX = e.touches[0].clientX;
+        targetY = e.touches[0].clientY;
+      }
+    };
+
     window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("touchmove", handleTouchMove);
+    window.addEventListener("touchstart", handleTouchMove);
 
     const animate = (time: number) => {
       // Smooth out mouse movement to make it feel like viscous fluid
@@ -130,13 +140,11 @@ export default function ParticleRing() {
     return () => {
       window.removeEventListener("resize", resizeCanvas);
       window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchstart", handleTouchMove);
       cancelAnimationFrame(rafId);
     };
   }, []);
-
-  if (typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches) {
-    return null;
-  }
 
   return (
     <motion.canvas
