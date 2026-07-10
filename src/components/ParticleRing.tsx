@@ -149,6 +149,7 @@ export default function ParticleRing() {
   return (
     <motion.canvas
       ref={canvasRef}
+      id="particle-ring"
       className="pointer-events-none fixed top-0 left-0 w-screen h-screen -z-10"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

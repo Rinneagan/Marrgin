@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Home, Compass, PenTool, BookMarked, Bell, User, LogOut, Menu, X } from "lucide-react";
@@ -33,39 +33,48 @@ export default function MobileNavbar() {
     router.push("/");
   };
 
-  return (
-    <>
-      {/* Mobile Sticky Header */}
-      <div className="md:hidden sticky top-0 z-40 w-full bg-background/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="font-serif text-xl tracking-wide">
-          Marrgin
-        </Link>
-        <button onClick={() => setIsOpen(true)} className="p-2 -mr-2">
-          <Menu size={28} className="text-gray-800 dark:text-gray-200" />
-        </button>
-      </div>
+    useEffect(() => {
+      if (isOpen) {
+        document.body.classList.add('drawer-open');
+      } else {
+        document.body.classList.remove('drawer-open');
+      }
+      return () => document.body.classList.remove('drawer-open');
+    }, [isOpen]);
 
-      {/* Slide-out Drawer */}
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 md:hidden"
-            />
-            
-            {/* Drawer */}
-            <motion.div
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-              className="fixed top-0 left-0 bottom-0 w-[280px] bg-transparent backdrop-blur-md border-r border-gray-200 dark:border-gray-800 z-50 flex flex-col p-8 md:hidden shadow-2xl"
-            >
+    return (
+      <>
+        {/* Mobile Sticky Header */}
+        <div className="md:hidden sticky top-0 z-40 w-full bg-background/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="font-serif text-xl tracking-wide">
+            Marrgin
+          </Link>
+          <button onClick={() => setIsOpen(true)} className="p-2 -mr-2">
+            <Menu size={28} className="text-gray-800 dark:text-gray-200" />
+          </button>
+        </div>
+  
+        {/* Slide-out Drawer */}
+        <AnimatePresence>
+          {isOpen && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsOpen(false)}
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 md:hidden"
+              />
+              
+              {/* Drawer */}
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+                className="fixed top-0 left-0 bottom-0 w-[280px] bg-background border-r border-gray-200 dark:border-gray-800 z-50 flex flex-col p-8 md:hidden shadow-2xl"
+              >
               <div className="flex justify-between items-center mb-12">
                 <Link href="/" onClick={() => setIsOpen(false)} className="font-serif text-2xl tracking-wide">
                   MARRGIN
