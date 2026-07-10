@@ -12,7 +12,7 @@ export default function BookmarkButton({ poemId }: { poemId: string }) {
 
   useEffect(() => {
     if (user && poemId) {
-      checkIsBookmarked(user.uid, poemId).then(setIsBookmarked);
+      checkIsBookmarked(user.uid, poemId).then(setIsBookmarked).catch(console.error);
     }
   }, [user, poemId]);
 

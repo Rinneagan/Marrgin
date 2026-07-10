@@ -14,7 +14,7 @@ export default function FollowButton({
 
   useEffect(() => {
     if (user && authorId) {
-      checkIsFollowing(user.uid, authorId).then(setIsFollowing);
+      checkIsFollowing(user.uid, authorId).then(setIsFollowing).catch(console.error);
     }
   }, [user, authorId]);
 

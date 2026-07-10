@@ -271,6 +271,10 @@ export const createPoem = async (
   return docRef.id;
 };
 
+export const deletePoem = async (poemId: string) => {
+  const poemRef = doc(db, "poems", poemId);
+  await deleteDoc(poemRef);
+};
 export const getLatestPoems = async (limitCount = 20) => {
   const poemsRef = collection(db, "poems");
   // Only get unvaulted poems

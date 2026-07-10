@@ -113,7 +113,7 @@ export default function PoemRenderer({
     <div className={`
       ${aesthetic === 'typewriter' ? "font-mono text-xl md:text-2xl tracking-tight leading-[2.5]" : ""}
       ${aesthetic === 'brutalist' ? "font-sans font-black uppercase text-3xl md:text-5xl lg:text-7xl tracking-tighter leading-[1.1]" : ""}
-      ${!aesthetic || aesthetic === 'default' ? "font-poem text-2xl md:text-3xl lg:text-4xl leading-[2.2] tracking-wide" : ""}
+      ${!aesthetic || aesthetic === 'default' ? "font-poem text-2xl md:text-3xl lg:text-4xl text-center leading-[2.5] tracking-wide" : ""}
       transition-colors duration-1000 
       ${isReadInDark ? "bg-black p-8 rounded-3xl" : "text-gray-800 dark:text-gray-200"}
     `}

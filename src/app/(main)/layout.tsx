@@ -13,10 +13,10 @@ export default function MainLayout({
   const { isZenMode } = useZenMode();
 
   return (
-    <div className="flex flex-col md:flex-row justify-center md:gap-8 max-w-[1400px] mx-auto min-h-screen md:px-4">
+    <div className="flex flex-col md:flex-row justify-between w-full min-h-screen">
       {!isZenMode && <MobileNavbar />}
       {!isZenMode && <LeftSidebar />}
-      <main className={`flex-1 w-full max-w-2xl bg-transparent py-4 md:py-8 px-4 md:px-0 ${isZenMode ? 'mx-auto' : ''}`}>
+      <main className={`flex-1 w-full max-w-6xl mx-auto bg-transparent py-4 md:py-8 px-4 md:px-8`}>
         {children}
       </main>
       {!isZenMode && <RightSidebar />}

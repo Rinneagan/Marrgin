@@ -14,7 +14,7 @@ export default function LikeButton({ poemId, initialLikesCount = 0 }: { poemId: 
 
   useEffect(() => {
     if (user && poemId) {
-      checkIsPoemLiked(user.uid, poemId).then(setIsLiked);
+      checkIsPoemLiked(user.uid, poemId).then(setIsLiked).catch(console.error);
     }
   }, [user, poemId]);
 

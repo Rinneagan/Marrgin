@@ -5,17 +5,18 @@ import FollowButton from "@/components/FollowButton";
 import BookmarkButton from "@/components/BookmarkButton";
 import LikeButton from "@/components/LikeButton";
 import CommentsSection from "@/components/CommentsSection";
-import { getPoemById, Poem, CommentData, getComments, togglePoemLike, checkIsPoemLiked, toggleBookmark, checkIsBookmarked, trackPoemRead, getCollectionsForUser, createCollection, addPoemToCollection, Collection } from "@/lib/db";
+import { getPoemById, Poem, CommentData, getComments, togglePoemLike, checkIsPoemLiked, toggleBookmark, checkIsBookmarked, trackPoemRead, getCollectionsForUser, createCollection, addPoemToCollection, Collection, deletePoem } from "@/lib/db";
 import Link from "next/link";
 import { motion, useScroll, useSpring, AnimatePresence } from "framer-motion";
 import { useZenMode } from "@/context/ZenContext";
-import { Bookmark, MessageCircle, Heart, Share2, CornerRightUp, Wind, Moon, ArrowDown, Activity, Download, ListPlus } from "lucide-react";
+import { Bookmark, MessageCircle, Heart, Share2, CornerRightUp, Wind, Moon, ArrowDown, Activity, Download, ListPlus, Trash2 } from "lucide-react";
 import PoemRenderer from "@/components/PoemRenderer";
 import EchoesPanel from "@/components/EchoesPanel";
 import WeatherOverlay from "@/components/WeatherOverlay";
 import { toPng } from 'html-to-image';
 import { useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
 
 export default function ReadingPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -23,6 +24,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const { isZenMode, setZenMode, setAmbientColor } = useZenMode();
   const { user } = useAuth();
+  const router = useRouter();
   
   // New Phase 9 Features
   const [isReadInDark, setIsReadInDark] = useState(false);
@@ -48,6 +50,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
   // Phase 13 Export
   const poemRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Anthologies / Collections
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
@@ -148,7 +151,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         const timeSpentSeconds = Math.floor((Date.now() - startTime) / 1000);
         // Only track if they spent at least 5 seconds reading
         if (timeSpentSeconds >= 5) {
-          trackPoemRead(poem.id, timeSpentSeconds, isCompleted);
+          trackPoemRead(poem.id, timeSpentSeconds, isCompleted).catch(console.error);
           setHasTracked(true); // Prevent double firing
         }
       }
@@ -222,16 +225,24 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
       });
       console.log("dataUrl generated, length:", dataUrl.length);
       const link = document.createElement('a');
-      link.download = `${poem?.title || 'poem'}-marrgin.png`;
+      link.download = `${poem?.title || 'poem'}.png`;
       link.href = dataUrl;
-      document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      console.log("Download triggered");
     } catch (err) {
       console.error('Failed to export poem', err);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!poem) return;
+    try {
+      await deletePoem(poem.id);
+      window.location.href = "/home";
+    } catch (err) {
+      console.error("Failed to delete poem", err);
+      alert("Failed to delete poem. Please try again.");
     }
   };
 
@@ -391,6 +402,16 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
             <Download size={18} />
             <span className="text-sm font-medium">{isExporting ? "Tearing..." : "Tear Out"}</span>
           </button>
+          
+          {user?.uid === poem.authorId && (
+            <button 
+              onClick={() => setShowDeleteConfirm(true)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-500 hover:text-white dark:hover:bg-red-600 dark:hover:text-white`}
+            >
+              <Trash2 size={18} />
+              <span className="text-sm font-medium">Burn Page</span>
+            </button>
+          )}
         </div>
 
         <div className={`mb-16 transition-opacity duration-1000 ${isZenMode ? "opacity-20 hover:opacity-100" : "opacity-100"}`}>
@@ -612,6 +633,49 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
               >
                 Cancel
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowDeleteConfirm(false)}
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#fdfbf7] dark:bg-[#111] p-8 rounded-2xl max-w-md w-full shadow-2xl border border-red-200 dark:border-red-900/50 relative overflow-hidden z-10"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
+              <h2 className="font-serif text-2xl mb-4 text-red-600 dark:text-red-500">Burn this page?</h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
+                Are you sure you want to completely tear out this page? It will be permanently removed from your collection and cannot be recovered.
+              </p>
+              
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 px-4 py-3 rounded-xl bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Keep It
+                </button>
+                <button 
+                  onClick={handleDelete}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30"
+                >
+                  <Trash2 size={18} />
+                  Burn Page
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
