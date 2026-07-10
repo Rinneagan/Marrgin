@@ -59,7 +59,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
 
   // Track completion based on scroll
   useEffect(() => {
-    return scrollYProgress.onChange((latest) => {
+    return scrollYProgress.on("change", (latest) => {
       if (latest > 0.9 && !isCompleted) {
         setIsCompleted(true);
       }
@@ -314,7 +314,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="py-12 md:py-20 px-4 md:px-8 max-w-[700px] mx-auto group relative"
+        className="py-12 md:py-20 px-8 max-w-[700px] mx-auto group relative bg-white dark:bg-black shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl mt-8 mb-24"
       >
         <div className="flex flex-wrap justify-end mb-8 gap-4">
           <button 

@@ -1,30 +1,96 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { createUserProfile } from "@/lib/db";
+import { createUserProfile, checkUsernameAvailability } from "@/lib/db";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { generateRandomUsername, generateAlternativeUsername } from "@/lib/usernameGenerator";
+import { RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Initialize with a random username
+  useEffect(() => {
+    generateAndCheckUsername();
+  }, []);
+
+  const generateAndCheckUsername = async () => {
+    setCheckingUsername(true);
+    let generated = generateRandomUsername();
+    let isAvailable = await checkUsernameAvailability(generated);
+    
+    // If not available, append a number
+    if (!isAvailable) {
+      generated = generateAlternativeUsername(generated);
+      isAvailable = await checkUsernameAvailability(generated);
+    }
+    
+    setUsername(generated);
+    setUsernameAvailable(isAvailable);
+    setCheckingUsername(false);
+  };
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    setUsername(val);
+    setUsernameAvailable(null);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (val.length < 3) return;
+
+    setCheckingUsername(true);
+    typingTimeoutRef.current = setTimeout(async () => {
+      const isAvailable = await checkUsernameAvailability(val);
+      setUsernameAvailable(isAvailable);
+      setCheckingUsername(false);
+    }, 500);
+  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    
+    if (username.length < 3) {
+      setError("Username must be at least 3 characters");
+      return;
+    }
+    if (usernameAvailable === false) {
+      setError("Username is already taken");
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Double check availability before creating
+      const isAvailable = await checkUsernameAvailability(username);
+      if (!isAvailable) {
+        setError("Username was just taken, please choose another.");
+        setUsernameAvailable(false);
+        setLoading(false);
+        return;
+      }
+
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
-      await createUserProfile(user.uid, user.email || "");
+      await createUserProfile(user.uid, user.email || "", username);
       router.push("/home");
     } catch (err: any) {
       setError(getAuthErrorMessage(err));
@@ -49,6 +115,42 @@ export default function SignupPage() {
         {error && <div className="text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/20 py-2 rounded-xl">{error}</div>}
         
         <form onSubmit={handleSignup} className="space-y-4">
+          <div>
+            <div className="relative">
+              <input
+                type="text"
+                value={username}
+                onChange={handleUsernameChange}
+                placeholder="Username"
+                required
+                className={`w-full px-4 py-3 rounded-xl border bg-transparent outline-none transition-colors pr-24 ${
+                  usernameAvailable === false ? 'border-red-500 focus:border-red-500' : 
+                  usernameAvailable === true ? 'border-green-500 dark:border-green-800 focus:border-green-500' : 
+                  'border-gray-200 dark:border-gray-700 focus:border-accent'
+                }`}
+              />
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                {checkingUsername && <RefreshCw size={16} className="text-secondary animate-spin" />}
+                {!checkingUsername && usernameAvailable === true && <CheckCircle2 size={18} className="text-green-500" />}
+                {!checkingUsername && usernameAvailable === false && <XCircle size={18} className="text-red-500" />}
+                <button
+                  type="button"
+                  onClick={generateAndCheckUsername}
+                  title="Generate random name"
+                  className="text-secondary hover:text-accent transition-colors ml-1"
+                >
+                  <RefreshCw size={16} />
+                </button>
+              </div>
+            </div>
+            {usernameAvailable === false && (
+              <p className="text-xs text-red-500 mt-1 ml-1">This username is taken</p>
+            )}
+            {usernameAvailable === true && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1 ml-1">Username available</p>
+            )}
+          </div>
+
           <input
             type="email"
             value={email}
@@ -87,7 +189,7 @@ export default function SignupPage() {
             </button>
           </div>
           <button 
-            disabled={loading}
+            disabled={loading || usernameAvailable === false || checkingUsername}
             className="w-full bg-black dark:bg-white text-white dark:text-black py-3 rounded-full hover:opacity-90 transition-opacity font-medium disabled:opacity-50"
           >
             {loading ? "Signing up..." : "Sign Up"}

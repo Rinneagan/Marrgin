@@ -1,7 +1,7 @@
 import { db } from "./firebase";
 import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 
-export const createUserProfile = async (uid: string, email: string) => {
+export const createUserProfile = async (uid: string, email: string, username: string) => {
   if (!uid) return;
 
   const userRef = doc(db, "users", uid);
@@ -12,16 +12,23 @@ export const createUserProfile = async (uid: string, email: string) => {
     try {
       await setDoc(userRef, {
         email,
-        displayName: email.split("@")[0], // Default display name
+        displayName: username,
         bio: "I am a poet. Welcome to my thoughts.",
         followersCount: 0,
         followingCount: 0,
         readingStreak: 0,
         lastReadDate: null,
         createdAt: serverTimestamp(),
-        penNames: [email.split("@")[0]], // Default pen name
-        currentPenName: email.split("@")[0]
+        penNames: [username],
+        currentPenName: username
       });
+      
+      // Reserve username
+      const usernameRef = doc(db, "usernames", username.toLowerCase());
+      await setDoc(usernameRef, { uid, createdAt: serverTimestamp() });
+
+      // TRIGGER ADMIN NOTIFICATION
+      await createAdminNotification("signup", `New user signed up: ${username} (${email})`);
     } catch (error) {
       console.error("Error creating user profile", error);
     }
@@ -182,6 +189,11 @@ export const createPoem = async (
     completionsCount: 0,
     ...(isVaulted && passphrase ? { passphrase } : {})
   });
+  
+  if (!isVaulted) {
+    await createSiteNotification("poem", `New poem published: ${title}`, `/read/${docRef.id}`);
+  }
+  
   return docRef.id;
 };
 
@@ -221,7 +233,7 @@ export interface CommentData {
 
 export const addComment = async (poemId: string, authorId: string, authorName: string, content: string, lineIndex: number | null = null, parentId: string | null = null) => {
   const commentsRef = collection(db, "poems", poemId, "comments");
-  await addDoc(commentsRef, {
+  const docRef = await addDoc(commentsRef, {
     authorId,
     authorName,
     content,
@@ -230,6 +242,24 @@ export const addComment = async (poemId: string, authorId: string, authorName: s
     parentId,
     isPinned: false
   });
+
+  // Track global comment count
+  const statsRef = doc(db, "statistics", "global");
+  await setDoc(statsRef, { totalComments: increment(1) }, { merge: true });
+
+  await createSiteNotification("comment", `New comment by ${authorName}`, `/read/${poemId}`);
+
+  // User notification for reply
+  if (parentId) {
+    const parentRef = doc(db, "poems", poemId, "comments", parentId);
+    const parentSnap = await getDoc(parentRef);
+    if (parentSnap.exists()) {
+      const parentAuthorId = parentSnap.data().authorId;
+      if (parentAuthorId !== authorId) {
+        await createUserNotification(parentAuthorId, "reply", `${authorName} replied to your comment`, `/read/${poemId}`);
+      }
+    }
+  }
 };
 
 export const getComments = async (poemId: string) => {
@@ -319,4 +349,110 @@ export const checkIsPoemLiked = async (userId: string, poemId: string) => {
   const likeRef = doc(db, "poems", poemId, "likes", userId);
   const snapshot = await getDoc(likeRef);
   return snapshot.exists();
+};
+
+// --- Tracking & Notifications ---
+
+export const createAdminNotification = async (type: "signup" | "visit", details: string) => {
+  const notifRef = collection(db, "adminNotifications");
+  await addDoc(notifRef, {
+    type,
+    details,
+    createdAt: serverTimestamp(),
+    isRead: false
+  });
+};
+
+export const trackUniqueVisit = async () => {
+  const statsRef = doc(db, "statistics", "global");
+  try {
+    const snap = await getDoc(statsRef);
+    if (!snap.exists()) {
+      await setDoc(statsRef, { totalVisits: 1 }, { merge: true });
+    } else {
+      await updateDoc(statsRef, { totalVisits: increment(1) });
+    }
+  } catch (e) {
+    console.error("Error tracking visit", e);
+  }
+};
+
+export const createSiteNotification = async (type: "poem" | "comment", details: string, link: string) => {
+  const notifRef = collection(db, "siteNotifications");
+  await addDoc(notifRef, {
+    type,
+    details,
+    link,
+    createdAt: serverTimestamp()
+  });
+};
+
+export const createUserNotification = async (userId: string, type: "reply", details: string, link: string) => {
+  const notifRef = collection(db, "users", userId, "notifications");
+  await addDoc(notifRef, {
+    type,
+    details,
+    link,
+    createdAt: serverTimestamp(),
+    isRead: false
+  });
+};
+
+export const getAdminStats = async () => {
+  const poemsRef = collection(db, "poems");
+  
+  const bestQ = query(poemsRef, orderBy("likesCount", "desc"), limit(1));
+  const bestSnap = await getDocs(bestQ);
+  const bestPoem = bestSnap.docs.length > 0 ? { id: bestSnap.docs[0].id, ...bestSnap.docs[0].data() } as Poem : null;
+
+  const worstQ = query(poemsRef, orderBy("likesCount", "asc"), limit(1));
+  const worstSnap = await getDocs(worstQ);
+  const worstPoem = worstSnap.docs.length > 0 ? { id: worstSnap.docs[0].id, ...worstSnap.docs[0].data() } as Poem : null;
+
+  const statsRef = doc(db, "statistics", "global");
+  const statsSnap = await getDoc(statsRef);
+  const globalStats = statsSnap.exists() ? statsSnap.data() : { totalVisits: 0, totalComments: 0 };
+  
+  const allPoemsSnap = await getDocs(poemsRef);
+  const totalPoems = allPoemsSnap.docs.length;
+
+  const usersRef = collection(db, "users");
+  const usersSnap = await getDocs(usersRef);
+  const totalUsers = usersSnap.docs.length;
+
+  return {
+    bestPoem,
+    worstPoem,
+    totalComments: globalStats.totalComments || 0,
+    totalPoems,
+    totalVisits: globalStats.totalVisits || 0,
+    totalUsers
+  };
+};
+
+export const getAdminNotifications = async () => {
+  const notifRef = collection(db, "adminNotifications");
+  const q = query(notifRef, orderBy("createdAt", "desc"), limit(50));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export const getSiteNotifications = async () => {
+  const notifRef = collection(db, "siteNotifications");
+  const q = query(notifRef, orderBy("createdAt", "desc"), limit(50));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export const getUserNotifications = async (userId: string) => {
+  const notifRef = collection(db, "users", userId, "notifications");
+  const q = query(notifRef, orderBy("createdAt", "desc"), limit(50));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export const checkUsernameAvailability = async (username: string) => {
+  const usernameRef = doc(db, "usernames", username.toLowerCase());
+  const snap = await getDoc(usernameRef);
+  return !snap.exists();
 };

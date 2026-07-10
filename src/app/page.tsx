@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRef, useState, useEffect } from "react";
+import { trackUniqueVisit, createAdminNotification } from "@/lib/db";
 
 const cardVariants: any = {
   hidden: { opacity: 0, y: 50 },
@@ -79,6 +80,13 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Track unique visit
+    if (typeof window !== "undefined" && !sessionStorage.getItem("hasVisited")) {
+      sessionStorage.setItem("hasVisited", "true");
+      trackUniqueVisit();
+      createAdminNotification("visit", "A new user visited the site");
+    }
+
     // Pick a random quote after hydration to avoid SSR mismatch
     setRandomQuote(quotes[Math.floor(Math.random() * quotes.length)]);
     
