@@ -129,7 +129,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <div ref={containerRef} className={`min-h-screen relative overflow-hidden bg-background dark:bg-dark ${isLoading ? 'h-screen overflow-hidden' : ''}`}>
+      <div ref={containerRef} className={`min-h-screen relative overflow-hidden ${isLoading ? 'h-screen overflow-hidden' : ''}`}>
       {/* Background Watermark Parallax */}
       <motion.div 
         style={{ y: watermarkY }}

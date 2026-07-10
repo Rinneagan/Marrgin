@@ -497,12 +497,13 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
           )}
         </motion.div>
 
-        {!isZenMode && (
-          <div className="mt-16 border-t border-gray-100 dark:border-gray-800 pt-16">
-            <CommentsSection poemId={poem.id} />
-          </div>
-        )}
       </motion.article>
+
+      {!isZenMode && (
+        <div className="relative w-full max-w-[700px] mx-auto bg-transparent border-t border-gray-200 dark:border-gray-800 pb-24 mt-16 pt-16">
+          <CommentsSection poemId={poem.id} />
+        </div>
+      )}
 
       {/* Echoes Panel Side Flyout */}
       <EchoesPanel 
