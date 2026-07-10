@@ -1,0 +1,20 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .omega {
+        font-family: 'Cormorant Garamond', 'Times New Roman', Georgia, serif;
+        font-size: 360px;
+        font-weight: 400;
+        fill: #eee4cf;
+      }
+    </style>
+  </defs>
+  <!-- Dark premium rounded background -->
+  <rect width="512" height="512" rx="128" fill="#050505"/>
+  <!-- Inverted (rotated 180) omega symbol -->
+  <text x="256" y="280" 
+        class="omega" 
+        text-anchor="middle" 
+        dominant-baseline="central"
+        transform="rotate(180 256 256)">ω</text>
+</svg>

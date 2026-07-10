@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    font-family: var(--font-cormorant), serif !important;
+  }
+  body {
+    @apply bg-background text-black dark:text-gray-100;
+  }
+
+  .dark .prose {
+    --tw-prose-body: theme('colors.gray.400');
+    --tw-prose-headings: theme('colors.gray.200');
+  }
+
+  @keyframes rain {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(50%); }
+  }
+
+  @keyframes snow {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(50%); }
+  }
+}
+@layer utilities {
+  .text-shadow-glow {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 255, 255, 0.5);
+  }
+}
