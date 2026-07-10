@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setMessage("");
     setLoading(true);
 
     try {
@@ -32,14 +34,16 @@ export default function LoginPage() {
   };
 
   const handleResetPassword = async () => {
+    setError("");
+    setMessage("");
     if (!email) {
-      setError("Please enter your email address first to reset your password.");
+      setError("Please type your email address above first.");
       return;
     }
-    setError("");
+    
     try {
       await sendPasswordResetEmail(auth, email);
-      setError("Password reset email sent! Check your inbox.");
+      setMessage("Password reset email sent! Check your inbox.");
     } catch (err: any) {
       setError(getAuthErrorMessage(err));
     }
@@ -59,6 +63,7 @@ export default function LoginPage() {
 
       <div className="space-y-4">
         {error && <div className="text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/20 py-2 rounded-xl">{error}</div>}
+        {message && <div className="text-green-600 dark:text-green-400 text-sm text-center bg-green-50 dark:bg-green-900/20 py-2 rounded-xl">{message}</div>}
         
         <form onSubmit={handleLogin} className="space-y-4">
           <input
