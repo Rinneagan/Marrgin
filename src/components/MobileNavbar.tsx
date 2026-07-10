@@ -64,7 +64,7 @@ export default function MobileNavbar() {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-              className="fixed top-0 left-0 bottom-0 w-[280px] bg-background border-r border-gray-200 dark:border-gray-800 z-50 flex flex-col p-8 md:hidden shadow-2xl"
+              className="fixed top-0 left-0 bottom-0 w-[280px] bg-transparent backdrop-blur-md border-r border-gray-200 dark:border-gray-800 z-50 flex flex-col p-8 md:hidden shadow-2xl"
             >
               <div className="flex justify-between items-center mb-12">
                 <Link href="/" onClick={() => setIsOpen(false)} className="font-serif text-2xl tracking-wide">
