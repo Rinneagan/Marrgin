@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { EditorialMode, Piece } from "@/lib/db";
 import { 
   X, 
@@ -14,7 +14,9 @@ import {
   BookOpen, 
   BarChart2, 
   Star, 
-  Image as ImageIcon 
+  Image as ImageIcon,
+  Wand2,
+  Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -121,6 +123,38 @@ export default function PieceSettingsDrawer({
   dataTimeframe,
   onDataTimeframeChange,
 }: PieceSettingsDrawerProps) {
+  // ---------------------------------------------------------------------------
+  // AI Cover Generation — local state only, does not touch the piece data model
+  // Persistence path: identical to manual URL entry via onCoverImageChange(url)
+  // ---------------------------------------------------------------------------
+  const [coverImagePrompt, setCoverImagePrompt] = useState("");
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [generateError, setGenerateError] = useState("");
+
+  const handleGenerateCover = async () => {
+    if (!coverImagePrompt.trim() || isGeneratingImage) return;
+    setIsGeneratingImage(true);
+    setGenerateError("");
+    try {
+      // Historical Pollinations.ai endpoint — no API key, no backend route
+      const seed = Math.floor(Math.random() * 999999);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(coverImagePrompt.trim())}?seed=${seed}&width=1200&height=800&nologo=true`;
+      // Pre-load the image to confirm it resolved before updating the piece
+      await new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Image failed to load from Pollinations."));
+        img.src = url;
+      });
+      // Follows the exact same persistence path as a manually entered URL
+      onCoverImageChange(url);
+    } catch (e) {
+      setGenerateError("Generation failed. Check your connection and try again.");
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -215,18 +249,79 @@ export default function PieceSettingsDrawer({
                 <p className="text-[11px] text-neutral-400">Separate with commas.</p>
               </div>
 
-              {/* 4. Cover Image URL */}
-              <div className="space-y-1.5">
+              {/* 4. Cover Image */}
+              <div className="space-y-3">
                 <label className="font-mono uppercase tracking-widest text-neutral-400 flex items-center gap-1.5">
-                  <ImageIcon size={12} /> Cover Image URL
+                  <ImageIcon size={12} /> Cover Image
                 </label>
+
+                {/* Manual URL input */}
                 <input
                   type="text"
-                  placeholder="https://... (optional photograph or graphic)"
+                  placeholder="https://... (paste a photograph or graphic URL)"
                   value={coverImage}
                   onChange={(e) => onCoverImageChange(e.target.value)}
                   className="w-full bg-neutral-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-neutral-800 dark:text-neutral-200 outline-none focus:border-amber-500"
                 />
+
+                {/* Divider */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-gray-100 dark:bg-gray-900" />
+                  <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">or generate with AI</span>
+                  <div className="flex-1 h-px bg-gray-100 dark:bg-gray-900" />
+                </div>
+
+                {/* AI prompt + button */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. A melancholic rainy city in watercolor"
+                    value={coverImagePrompt}
+                    onChange={(e) => setCoverImagePrompt(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleGenerateCover(); } }}
+                    disabled={isGeneratingImage}
+                    className="flex-1 bg-neutral-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-neutral-800 dark:text-neutral-200 outline-none focus:border-amber-500 disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGenerateCover}
+                    disabled={isGeneratingImage || !coverImagePrompt.trim()}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-medium hover:bg-neutral-700 dark:hover:bg-neutral-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Generate AI cover image via Pollinations.ai"
+                  >
+                    {isGeneratingImage
+                      ? <Loader2 size={13} className="animate-spin" />
+                      : <Wand2 size={13} />}
+                    <span className="hidden sm:inline">
+                      {isGeneratingImage ? "Generating…" : "Generate"}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Error state */}
+                {generateError && (
+                  <p className="text-[11px] text-rose-500 font-sans">{generateError}</p>
+                )}
+
+                {/* Thumbnail preview */}
+                {coverImage && (
+                  <div className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 aspect-[3/2] bg-neutral-100 dark:bg-neutral-900">
+                    <img
+                      src={coverImage}
+                      alt="Cover preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onCoverImageChange("")}
+                      className="absolute top-2 right-2 p-1 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
+                      title="Remove cover image"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* 5. Featured Story Toggle */}
