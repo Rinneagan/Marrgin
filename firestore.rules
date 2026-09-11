@@ -16,7 +16,7 @@ service cloud.firestore {
     // Mutable emails, custom claims, and fallback strings are eliminated.
     // -------------------------------------------------------------
     function isAdmin() {
-      return isAuthenticated() && request.auth.uid == 'O0ePpSc6JTUrMKZ0cLZ2FM7eGPh2';
+      return isAuthenticated() && request.auth.uid == '54WZPYBFR8VIPv9qpIDn1FI0bcz1';
     }
 
     // A piece is public only if it is published and not vaulted.
