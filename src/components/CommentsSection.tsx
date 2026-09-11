@@ -9,7 +9,7 @@ interface CommentsSectionProps {
   poemId: string;
 }
 
-const SINGLE_ADMIN_UID = "O0ePpSc6JTUrMKZ0cLZ2FM7eGPh2";
+const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
 
 function formatRelativeTime(ms: number): string {
   if (!ms) return "Recently";

@@ -10,7 +10,7 @@ import {
   restModerateComment 
 } from "@/lib/serverFirestoreRest";
 
-const SINGLE_ADMIN_UID = "O0ePpSc6JTUrMKZ0cLZ2FM7eGPh2";
+const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
 
 function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex").slice(0, 32);

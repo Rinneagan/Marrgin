@@ -52,7 +52,7 @@ import AdminAccountModal from "@/components/AdminAccountModal";
 import { BlockCanvas } from "@/components/studio/BlockCanvas";
 import { SocialPreviewModal } from "@/components/studio/SocialPreviewModal";
 
-const SINGLE_ADMIN_UID = "O0ePpSc6JTUrMKZ0cLZ2FM7eGPh2";
+const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
 
 function WritingDeskContent() {
   const { user, loading } = useAuth();
