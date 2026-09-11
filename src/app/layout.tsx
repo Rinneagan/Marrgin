@@ -14,7 +14,7 @@ const cormorant = Cormorant_Garamond({
 
 export const metadata: Metadata = {
   title: "Marrgin",
-  description: "A reading experience for poetry",
+  description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
 };
 
 export default function RootLayout({

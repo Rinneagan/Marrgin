@@ -1,18 +1,23 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import FollowButton from "@/components/FollowButton";
-import BookmarkButton from "@/components/BookmarkButton";
-import LikeButton from "@/components/LikeButton";
-import CommentsSection from "@/components/CommentsSection";
-import { getPoemById, Poem, CommentData, getComments, togglePoemLike, checkIsPoemLiked, toggleBookmark, checkIsBookmarked, trackPoemRead, getCollectionsForUser, createCollection, addPoemToCollection, Collection, deletePoem } from "@/lib/db";
+import { getPoemById, Piece, CommentData, getComments, trackPoemRead, getCollectionsForUser, createCollection, addPoemToCollection, Collection, deletePoem, EditorialMode } from "@/lib/db";
 import Link from "next/link";
 import { motion, useScroll, useSpring, AnimatePresence } from "framer-motion";
 import { useZenMode } from "@/context/ZenContext";
-import { Bookmark, MessageCircle, Heart, Share2, CornerRightUp, Wind, Moon, ArrowDown, Activity, Download, ListPlus, Trash2 } from "lucide-react";
+import { Wind, Moon, ArrowDown, Activity, Download, Trash2 } from "lucide-react";
 import PoemRenderer from "@/components/PoemRenderer";
+import PieceHeader from "@/components/PieceHeader";
+import ProseRenderer from "@/components/ProseRenderer";
+import MethodologyDisclosure from "@/components/MethodologyDisclosure";
+import LimitationsDisclosure from "@/components/LimitationsDisclosure";
+import PublicSources from "@/components/PublicSources";
+import CorrectionsNotice from "@/components/CorrectionsNotice";
+import FieldNoteBlocks from "@/components/FieldNoteBlocks";
+import DataStoryMetadata from "@/components/DataStoryMetadata";
 import EchoesPanel from "@/components/EchoesPanel";
 import WeatherOverlay from "@/components/WeatherOverlay";
+import CommentsSection from "@/components/CommentsSection";
 import { toPng } from 'html-to-image';
 import { useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -20,34 +25,34 @@ import { useRouter } from "next/navigation";
 
 export default function ReadingPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
-  const [poem, setPoem] = useState<Poem | null>(null);
+  const [piece, setPiece] = useState<Piece | null>(null);
   const [loading, setLoading] = useState(true);
   const { isZenMode, setZenMode, setAmbientColor } = useZenMode();
   const { user } = useAuth();
   const router = useRouter();
   
-  // New Phase 9 Features
+  // Reading Atmosphere & Focus Controls
   const [isReadInDark, setIsReadInDark] = useState(false);
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
   const [showBreathing, setShowBreathing] = useState(false);
   
-  // Phase 12: Publication Metadata
+  // Poetry Specific Publication Metadata
   const [showDedication, setShowDedication] = useState(true);
   const [revisionDraft, setRevisionDraft] = useState(100);
   
-  // Phase 13: Echoes
+  // Echoes & Marginalia (Works for stanzas in poetry & paragraphs in prose)
   const [comments, setComments] = useState<CommentData[]>([]);
   const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
   const [selectedLineText, setSelectedLineText] = useState("");
 
-  // Phase 12 Analytics & Afterword
+  // Reading Analytics & Earned Afterword
   const [startTime] = useState(Date.now());
   const [isCompleted, setIsCompleted] = useState(false);
   const [hasTracked, setHasTracked] = useState(false);
   const [afterwordUnlocked, setAfterwordUnlocked] = useState(false);
 
-  // Phase 13 Export
+  // Export Canvas & Author Controls
   const poemRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -66,6 +71,8 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
     restDelta: 0.001
   });
 
+  const mode: EditorialMode = piece?.mode || "poetry";
+
   // Track completion based on scroll
   useEffect(() => {
     return scrollYProgress.on("change", (latest) => {
@@ -75,11 +82,10 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
     });
   }, [scrollYProgress, isCompleted]);
 
-  // Afterword Unlock Timer
+  // Poetry-Only: Afterword Unlock Timer
   useEffect(() => {
-    if (poem?.afterword) {
-      // Calculate read time: words / 200 wpm. Minimum 5 seconds.
-      const wordCount = poem.content.split(/\s+/).length;
+    if (mode === "poetry" && piece?.afterword) {
+      const wordCount = piece.content.split(/\s+/).length;
       const readTimeSeconds = Math.max(5, Math.floor((wordCount / 200) * 60));
       
       const timer = setTimeout(() => {
@@ -88,20 +94,20 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
 
       return () => clearTimeout(timer);
     }
-  }, [poem]);
+  }, [piece, mode]);
 
-  // Map tags to an ambient color
+  // Mood color for ambient canvas (poetry only)
   const getMoodColor = (tags: string[]) => {
-    if (!tags || tags.length === 0) return "120, 119, 198"; // Default slate-purple
+    if (!tags || tags.length === 0) return "120, 119, 198";
     const tag = tags[0].toLowerCase();
     switch (tag) {
-      case "love": return "255, 113, 112"; // Coral/Red
-      case "hope": return "252, 211, 77"; // Warm Gold
-      case "grief": return "71, 85, 105"; // Slate Gray
-      case "nature": return "52, 211, 153"; // Emerald Green
-      case "dark": return "30, 41, 59"; // Deep Black/Slate
-      case "dreams": return "167, 139, 250"; // Violet
-      default: return "120, 119, 198"; // Default
+      case "love": return "255, 113, 112";
+      case "hope": return "252, 211, 77";
+      case "grief": return "71, 85, 105";
+      case "nature": return "52, 211, 153";
+      case "dark": return "30, 41, 59";
+      case "dreams": return "167, 139, 250";
+      default: return "120, 119, 198";
     }
   };
 
@@ -110,145 +116,164 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
       const data = await getComments(resolvedParams.id);
       setComments(data);
     } catch (e) {
-      console.error(e);
+      console.error("Error fetching comments:", e);
     }
   };
 
   useEffect(() => {
-    const fetchPoem = async () => {
+    const fetchPieceData = async () => {
       try {
         const data = await getPoemById(resolvedParams.id);
-        setPoem(data);
+        setPiece(data);
         if (data) {
-          setAmbientColor(getMoodColor([]));
-          if (!data.dedication) {
-            setShowDedication(false);
+          if (data.mode === "poetry" || !data.mode) {
+            setAmbientColor(getMoodColor(data.tags || []));
+            if (!data.dedication) {
+              setShowDedication(false);
+            } else {
+              setTimeout(() => setShowDedication(false), 4000);
+            }
           } else {
-            // Dedication screen disappears after 4 seconds
-            setTimeout(() => setShowDedication(false), 4000);
+            setShowDedication(false);
+            setAmbientColor(null);
           }
         }
       } catch (error) {
-        console.error("Failed to fetch poem:", error);
+        console.error("Failed to fetch piece:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchPoem();
+
+    fetchPieceData();
     fetchCommentsData();
     
     return () => {
-      // Always reset Zen Mode and Ambient Color when leaving the page
       setZenMode(false);
       setAmbientColor(null);
-    }
+    };
   }, [resolvedParams.id, setZenMode, setAmbientColor]);
 
-  // Track reading analytics on unmount or navigation
+  // Reading Analytics Tracker (Universal across all modes)
   useEffect(() => {
     return () => {
-      if (poem && !hasTracked) {
+      if (piece && !hasTracked) {
         const timeSpentSeconds = Math.floor((Date.now() - startTime) / 1000);
-        // Only track if they spent at least 5 seconds reading
         if (timeSpentSeconds >= 5) {
-          trackPoemRead(poem.id, timeSpentSeconds, isCompleted).catch(console.error);
-          setHasTracked(true); // Prevent double firing
+          trackPoemRead(piece.id, timeSpentSeconds, isCompleted).catch(console.error);
+          setHasTracked(true);
         }
       }
     };
-  }, [poem, startTime, isCompleted, hasTracked]);
+  }, [piece, startTime, isCompleted, hasTracked]);
 
+  // Poetry-Only: Auto-Scroll Rhythm
   useEffect(() => {
     let scrollInterval: NodeJS.Timeout;
-    if (isAutoScrolling) {
+    if (isAutoScrolling && mode === "poetry") {
       scrollInterval = setInterval(() => {
         window.scrollBy({ top: 1, behavior: "auto" });
-      }, 50); // Slow, rhythmic scroll
+      }, 50);
     }
     return () => clearInterval(scrollInterval);
-  }, [isAutoScrolling]);
+  }, [isAutoScrolling, mode]);
 
   if (loading) {
     return (
-      <div className="py-20 px-8 flex justify-center">
-        <p className="text-secondary text-lg">Loading poem...</p>
+      <div className="py-24 px-8 flex justify-center items-center min-h-[50vh]">
+        <p className="font-serif text-secondary text-lg animate-pulse">Reading Marrgin...</p>
       </div>
     );
   }
 
-  if (!poem) {
+  if (!piece) {
     return (
-      <div className="py-20 px-8 flex flex-col items-center gap-4">
-        <p className="text-secondary text-lg">Poem not found.</p>
-        <Link href="/home" className="text-accent hover:underline">
-          Return to Feed
+      <div className="py-24 px-8 flex flex-col items-center gap-4 min-h-[50vh] justify-center">
+        <p className="font-serif text-secondary text-xl">Piece not found or unavailable.</p>
+        <Link href="/home" className="text-accent hover:underline font-serif text-base">
+          Return to Marrgin
         </Link>
       </div>
     );
   }
 
+  // Calculate Mode-Appropriate Reading Time
+  const calculateReadingTime = (): string | null => {
+    if (!piece.content) return null;
+    const wordCount = piece.content.trim().split(/\s+/).filter(Boolean).length;
+    if (mode === "poetry") {
+      return `${Math.max(1, Math.ceil(piece.content.length / 500))} min read`;
+    }
+    if (mode === "field-note") {
+      if (wordCount < 60) return "Quick read";
+      return `${Math.max(1, Math.ceil(wordCount / 250))} min read`;
+    }
+    if (mode === "investigation" || mode === "data-story") {
+      return `${Math.max(1, Math.ceil(wordCount / 200))} min read`;
+    }
+    // Essay
+    return `${Math.max(1, Math.ceil(wordCount / 225))} min read`;
+  };
+
   const startDeepRead = () => {
     setShowBreathing(true);
-    // Hide scrollbar
     document.body.style.overflow = "hidden";
-    
     setTimeout(() => {
       setShowBreathing(false);
       setZenMode(true);
       document.body.style.overflow = "unset";
-    }, 8000); // 8 seconds of breathing
+    }, 8000);
   };
 
+  // Line-Level Echoes (Poetry)
   const handleLineClick = (index: number) => {
-    if (!poem) return;
-    // We need to extract the text of the line clicked.
-    // For simplicity, we can strip the <fold> tags and just split by \n.
-    const allLines = poem.content.replace(/<fold>/g, "").replace(/<\/fold>/g, "").split("\n");
+    if (!piece) return;
+    const allLines = piece.content.replace(/<fold>/g, "").replace(/<\/fold>/g, "").split("\n");
     const text = allLines[index] || "";
-    setSelectedLineText(text.trim() ? text.trim() : "(Empty Line)");
+    setSelectedLineText(text.trim() ? text.trim() : "(Line)");
+    setSelectedLineIndex(index);
+  };
+
+  // Paragraph-Level Echoes (Prose: Essay, Investigation, Data Story)
+  const handleParagraphClick = (index: number, text: string) => {
+    setSelectedLineText(text.trim() ? text.trim() : "(Paragraph)");
     setSelectedLineIndex(index);
   };
 
   const handleExport = async () => {
-    console.log("Tear Out button clicked", { hasRef: !!poemRef.current });
-    if (!poemRef.current) {
-      console.error("poemRef is null");
-      return;
-    }
+    if (!poemRef.current) return;
     setIsExporting(true);
     try {
-      console.log("Starting toPng...");
       const dataUrl = await toPng(poemRef.current, {
         cacheBust: true,
         backgroundColor: isReadInDark ? '#000000' : '#ffffff',
         style: { padding: '40px' }
       });
-      console.log("dataUrl generated, length:", dataUrl.length);
       const link = document.createElement('a');
-      link.download = `${poem?.title || 'poem'}.png`;
+      link.download = `${piece.title || 'marrgin-piece'}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
-      console.error('Failed to export poem', err);
+      console.error('Failed to export piece', err);
     } finally {
       setIsExporting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!poem) return;
+    if (!piece) return;
     try {
-      await deletePoem(poem.id);
-      window.location.href = "/home";
+      await deletePoem(piece.id);
+      router.push("/home");
     } catch (err) {
-      console.error("Failed to delete poem", err);
-      alert("Failed to delete poem. Please try again.");
+      console.error("Failed to delete piece", err);
+      alert("Failed to delete piece. Please try again.");
     }
   };
 
   const handleSaveToPlaylist = async () => {
-    if (!user || !poem) {
-      alert("Please sign in to save poems.");
+    if (!user || !piece) {
+      alert("Please sign in to save pieces to an anthology.");
       return;
     }
     const userCollections = await getCollectionsForUser(user.uid);
@@ -257,9 +282,9 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
   };
 
   const handleAddToCollection = async (collectionId: string) => {
-    if (!poem) return;
+    if (!piece) return;
     try {
-      await addPoemToCollection(collectionId, poem.id);
+      await addPoemToCollection(collectionId, piece.id);
       setIsCollectionModalOpen(false);
     } catch (e) {
       console.error(e);
@@ -268,11 +293,11 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
 
   const handleCreateAndAddCollection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !poem || !newCollectionName.trim()) return;
+    if (!user || !piece || !newCollectionName.trim()) return;
     setIsCreatingCollection(true);
     try {
       const newColId = await createCollection(user.uid, user.displayName || "Unknown", newCollectionName);
-      await addPoemToCollection(newColId, poem.id);
+      await addPoemToCollection(newColId, piece.id);
       setIsCollectionModalOpen(false);
       setNewCollectionName("");
     } catch (error) {
@@ -282,15 +307,16 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
     }
   };
 
-
   return (
     <>
-      {/* Weather Overlay (Phase 9) */}
-      {poem?.weather && poem.weather !== "none" && <WeatherOverlay weather={poem.weather} />}
+      {/* Poetry-Only Weather Overlay */}
+      {mode === "poetry" && piece?.weather && piece.weather !== "none" && (
+        <WeatherOverlay weather={piece.weather} />
+      )}
 
-      {/* Breathing Interstitial */}
+      {/* Poetry-Only Breathing Interstitial */}
       <AnimatePresence>
-        {showBreathing && (
+        {mode === "poetry" && showBreathing && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -319,8 +345,9 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         )}
       </AnimatePresence>
 
+      {/* Poetry-Only Dedication Splash Screen */}
       <AnimatePresence>
-        {showDedication && poem?.dedication && (
+        {mode === "poetry" && showDedication && piece?.dedication && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -333,237 +360,329 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
               transition={{ delay: 0.5, duration: 1.5 }}
               className="font-poem italic text-2xl text-secondary"
             >
-              {poem.dedication}
+              {piece.dedication}
             </motion.p>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Top Scroll Progress Indicator */}
       <motion.div
         className="fixed top-0 left-0 right-0 h-1 bg-accent transform origin-left z-50"
         style={{ scaleX }}
       />
+
+      {/* Main Article Container */}
       <motion.article 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="py-12 md:py-20 px-8 max-w-[700px] mx-auto group relative bg-white dark:bg-black shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl mt-8 mb-24"
+        className="py-12 md:py-20 px-6 sm:px-10 max-w-[820px] mx-auto group relative bg-white dark:bg-black shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl mt-8 mb-24"
       >
-        <div className="flex flex-wrap justify-end mb-8 gap-4">
-          <button 
-            onClick={startDeepRead}
-            className="flex items-center gap-2 px-4 py-2 rounded-full transition-all bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white hover:border-accent"
-          >
-            <Activity size={18} />
-            <span className="text-sm font-medium">Deep Read</span>
-          </button>
+        {/* Universal & Mode-Filtered Controls Toolbar */}
+        <div className="flex flex-wrap justify-end mb-10 gap-3 font-sans">
+          {/* Poetry-Only: Deep Read (Breathing Pacer) */}
+          {mode === "poetry" && (
+            <button 
+              onClick={startDeepRead}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white hover:border-accent text-xs font-medium"
+            >
+              <Activity size={15} />
+              <span>Deep Read</span>
+            </button>
+          )}
           
-          <button 
-            onClick={() => setIsAutoScrolling(!isAutoScrolling)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
-              isAutoScrolling 
-                ? "bg-accent text-white" 
-                : "bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white"
-            }`}
-          >
-            <ArrowDown size={18} className={isAutoScrolling ? "animate-bounce" : ""} />
-            <span className="text-sm font-medium">Auto-Scroll</span>
-          </button>
+          {/* Poetry-Only: Auto-Scroll */}
+          {mode === "poetry" && (
+            <button 
+              onClick={() => setIsAutoScrolling(!isAutoScrolling)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all text-xs font-medium ${
+                isAutoScrolling 
+                  ? "bg-accent text-white" 
+                  : "bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white"
+              }`}
+            >
+              <ArrowDown size={15} className={isAutoScrolling ? "animate-bounce" : ""} />
+              <span>Auto-Scroll</span>
+            </button>
+          )}
           
+          {/* Universal: Dark Mode */}
           <button 
             onClick={() => setIsReadInDark(!isReadInDark)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all text-xs font-medium ${
               isReadInDark 
                 ? "bg-black text-white border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.2)]" 
                 : "bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white"
             }`}
           >
-            <Moon size={18} />
-            <span className="text-sm font-medium">Dark Mode</span>
+            <Moon size={15} />
+            <span>Dark Reading</span>
           </button>
 
+          {/* Universal: Zen Mode */}
           <button 
             onClick={() => setZenMode(!isZenMode)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all text-xs font-medium ${
               isZenMode 
                 ? "bg-accent text-white shadow-[0_0_15px_rgba(var(--accent),0.3)]" 
                 : "bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white"
             }`}
           >
-            <Wind size={18} />
-            <span className="text-sm font-medium">Zen Mode</span>
+            <Wind size={15} />
+            <span>Zen Mode</span>
           </button>
 
+          {/* Universal: Tear Out (Export Canvas) */}
           <button 
             onClick={handleExport}
             disabled={isExporting}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white disabled:opacity-50`}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white disabled:opacity-50 text-xs font-medium"
           >
-            <Download size={18} />
-            <span className="text-sm font-medium">{isExporting ? "Tearing..." : "Tear Out"}</span>
+            <Download size={15} />
+            <span>{isExporting ? "Tearing..." : "Tear Out"}</span>
           </button>
           
-          {user?.uid === poem.authorId && (
+          {/* Author Burn Page */}
+          {user?.uid === piece.authorId && (
             <button 
               onClick={() => setShowDeleteConfirm(true)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-500 hover:text-white dark:hover:bg-red-600 dark:hover:text-white`}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-500 hover:text-white dark:hover:bg-red-600 dark:hover:text-white text-xs font-medium"
             >
-              <Trash2 size={18} />
-              <span className="text-sm font-medium">Burn Page</span>
+              <Trash2 size={15} />
+              <span>Burn Page</span>
             </button>
           )}
         </div>
 
-        <div className={`mb-16 transition-opacity duration-1000 ${isZenMode ? "opacity-20 hover:opacity-100" : "opacity-100"}`}>
-          {poem.coverImage && (
-            <div className="w-full h-[40vh] md:h-[50vh] relative mb-12 rounded-xl overflow-hidden shadow-2xl">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={poem.coverImage} alt="Cover Art" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#fdfbf7] dark:from-[#0a0a0a] to-transparent"></div>
-            </div>
-          )}
-          <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl mb-4 leading-tight">{poem.title || "Untitled"}</h1>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <Link href={`/user/${poem.authorId}`} className="text-xl text-secondary hover:text-black dark:hover:text-white transition-colors">
-                by {poem.authorName}
-              </Link>
-              <FollowButton authorId={poem.authorId} />
-            </div>
-            <div className="flex items-center gap-6">
-              <LikeButton poemId={poem.id} initialLikesCount={poem.likesCount} />
-              <BookmarkButton poemId={poem.id} />
-            </div>
-          </div>
-          <div className="mt-8 text-sm text-gray-400 uppercase tracking-widest flex items-center gap-4">
-            <span>{Math.max(1, Math.ceil(poem.content.length / 500))} min read</span>
-            <button 
-              onClick={handleSaveToPlaylist}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white`}
-            >
-              <ListPlus size={18} />
-              <span className="text-sm font-medium">Save to Anthology</span>
-            </button>
-          </div>
-        </div>
+        {/* Mode-Aware Piece Header */}
+        <PieceHeader 
+          piece={piece}
+          readingTimeText={calculateReadingTime()}
+          onSaveToPlaylist={handleSaveToPlaylist}
+          isZenMode={isZenMode}
+        />
         
-        {/* Breathing Typography, Folded Poem, Typography as Emotion, & Read In Dark */}
+        {/* Mode-Aware Article Body */}
         <motion.div 
           ref={poemRef}
-          className="max-w-[800px] mx-auto relative z-10"
-          initial={{ opacity: 0, y: 40 }}
+          className="max-w-[760px] mx-auto relative z-10"
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1.5, delay: 0.5, ease: "easeOut" }}
+          transition={{ duration: 1.2, delay: 0.2, ease: "easeOut" }}
         >
-          <div className="text-center mb-16">
-            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl mb-6">{poem.title}</h1>
-            <p className="text-secondary font-medium tracking-widest uppercase text-sm flex items-center justify-center gap-2">
-              <span>By</span>
-              <Link href={`/user/${poem.authorId}`} className="hover:text-black dark:hover:text-white transition-colors hover:underline">
-                {poem.authorName}
-              </Link>
-              <span>• {poem.createdAt?.toDate().toLocaleDateString()}</span>
-            </p>
-          </div>
-
-          {poem.epigraph && (
-            <div className="mb-16 italic text-sm text-gray-500 dark:text-gray-400 text-right max-w-sm ml-auto border-r-2 border-gray-200 dark:border-gray-800 pr-4">
-              {poem.epigraph}
-            </div>
-          )}
-
-          {poem.isScrapbook ? (
-            <div className="relative w-full min-h-[600px] border border-gray-100 dark:border-gray-800 rounded-xl bg-white/5 overflow-hidden">
-              {poem.scrapbookElements?.map((el, i) => (
-                <div 
-                  key={i} 
-                  style={{ position: 'absolute', left: el.x, top: el.y }}
-                  className="font-poem text-xl text-gray-800 dark:text-gray-200 whitespace-pre-wrap max-w-sm"
-                >
-                  {el.text}
+          {/* 1. POETRY MODE: 100% untouched and preserved */}
+          {mode === "poetry" && (
+            <>
+              {piece.epigraph && (
+                <div className="mb-14 italic text-sm text-gray-500 dark:text-gray-400 text-right max-w-sm ml-auto border-r-2 border-gray-200 dark:border-gray-800 pr-4 font-serif">
+                  {piece.epigraph}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className={poem.translationContent ? "flex flex-col md:flex-row gap-16 md:gap-8 justify-center" : ""}>
-              <div className={poem.translationContent ? "flex-1 border-r border-gray-100 dark:border-gray-800 pr-8" : ""}>
-                <PoemRenderer 
-                  content={poem.content}
-                  aesthetic={poem.aesthetic}
-                  isReadInDark={isReadInDark}
-                  hoveredLineIndex={hoveredLineIndex}
-                  onHoverLine={setHoveredLineIndex}
-                  echoedLines={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
-                  onLineClick={handleLineClick}
-                  revisionDraft={revisionDraft}
-                />
-              </div>
-              {poem.translationContent && (
-                <div className="flex-1 pl-8">
-                  <PoemRenderer 
-                    content={poem.translationContent}
-                    aesthetic={poem.aesthetic}
-                    isReadInDark={isReadInDark}
-                    hoveredLineIndex={hoveredLineIndex}
-                    onHoverLine={setHoveredLineIndex}
-                    revisionDraft={revisionDraft}
+              )}
+
+              {piece.isScrapbook ? (
+                <div className="relative w-full min-h-[600px] border border-gray-100 dark:border-gray-800 rounded-xl bg-white/5 overflow-hidden">
+                  {piece.scrapbookElements?.map((el, i) => (
+                    <div 
+                      key={i} 
+                      style={{ position: 'absolute', left: el.x, top: el.y }}
+                      className="font-poem text-xl text-gray-800 dark:text-gray-200 whitespace-pre-wrap max-w-sm"
+                    >
+                      {el.text}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={piece.translationContent ? "flex flex-col md:flex-row gap-16 md:gap-8 justify-center" : ""}>
+                  <div className={piece.translationContent ? "flex-1 border-r border-gray-100 dark:border-gray-800 pr-8" : ""}>
+                    <PoemRenderer 
+                      content={piece.content}
+                      aesthetic={piece.aesthetic}
+                      isReadInDark={isReadInDark}
+                      hoveredLineIndex={hoveredLineIndex}
+                      onHoverLine={setHoveredLineIndex}
+                      echoedLines={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
+                      onLineClick={handleLineClick}
+                      revisionDraft={revisionDraft}
+                    />
+                  </div>
+                  {piece.translationContent && (
+                    <div className="flex-1 pl-8">
+                      <PoemRenderer 
+                        content={piece.translationContent}
+                        aesthetic={piece.aesthetic}
+                        isReadInDark={isReadInDark}
+                        hoveredLineIndex={hoveredLineIndex}
+                        onHoverLine={setHoveredLineIndex}
+                        revisionDraft={revisionDraft}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {piece.footnote && (
+                <div className="mt-14 pt-8 border-t border-gray-100 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400 font-serif">
+                  * {piece.footnote}
+                </div>
+              )}
+
+              {/* Earned Afterword Timer */}
+              <AnimatePresence>
+                {piece.afterword && afterwordUnlocked && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    transition={{ duration: 2 }}
+                    className="mt-16 pt-16 border-t-2 border-gray-100 dark:border-gray-800"
+                  >
+                    <h3 className="font-serif text-2xl mb-4 text-accent">Author's Afterword</h3>
+                    <p className="font-poem text-lg leading-relaxed text-gray-600 dark:text-gray-300">
+                      {piece.afterword}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Draft History Slider */}
+              {!piece.isScrapbook && !isZenMode && (
+                <div className="mt-16 pt-8 border-t border-gray-100 dark:border-gray-800 flex flex-col items-center">
+                  <label className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-4">
+                    Draft History: {revisionDraft === 100 ? "Final Publication" : `Draft v0.${Math.floor(revisionDraft)}`}
+                  </label>
+                  <input 
+                    type="range" 
+                    min="10" 
+                    max="100" 
+                    value={revisionDraft} 
+                    onChange={(e) => setRevisionDraft(parseInt(e.target.value))}
+                    className="w-full max-w-xs accent-accent"
                   />
                 </div>
               )}
-            </div>
+            </>
           )}
 
-          {poem.footnote && (
-            <div className="mt-16 pt-8 border-t border-gray-100 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400">
-              * {poem.footnote}
-            </div>
-          )}
-          
-          <AnimatePresence>
-            {poem.afterword && afterwordUnlocked && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                transition={{ duration: 2 }}
-                className="mt-16 pt-16 border-t-2 border-gray-100 dark:border-gray-800"
-              >
-                <h3 className="font-serif text-2xl mb-4 text-accent">Author's Afterword</h3>
-                <p className="font-poem text-lg leading-relaxed text-gray-600 dark:text-gray-300">
-                  {poem.afterword}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          
-          {/* Draft Slider (only if not scrapbook and not in zen mode) */}
-          {!poem.isScrapbook && !isZenMode && (
-            <div className="mt-16 pt-8 border-t border-gray-100 dark:border-gray-800 flex flex-col items-center">
-              <label className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-4">
-                Draft History: {revisionDraft === 100 ? "Final Publication" : `Draft v0.${Math.floor(revisionDraft)}`}
-              </label>
-              <input 
-                type="range" 
-                min="10" 
-                max="100" 
-                value={revisionDraft} 
-                onChange={(e) => setRevisionDraft(parseInt(e.target.value))}
-                className="w-full max-w-xs accent-accent"
+          {/* 2. ESSAY MODE: Literary long-form prose */}
+          {mode === "essay" && (
+            <>
+              {piece.epigraph && (
+                <div className="mb-12 italic text-base text-gray-600 dark:text-gray-400 text-right max-w-md ml-auto border-r-2 border-accent/40 pr-4 font-serif">
+                  {piece.epigraph}
+                </div>
+              )}
+
+              <ProseRenderer 
+                content={piece.content}
+                isReadInDark={isReadInDark}
+                onParagraphClick={handleParagraphClick}
+                echoedParagraphs={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
+                mode="essay"
               />
-            </div>
+
+              {piece.footnote && (
+                <div className="mt-14 pt-6 border-t border-gray-200 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400 font-serif">
+                  * {piece.footnote}
+                </div>
+              )}
+
+              {piece.afterword && (
+                <div className="mt-14 pt-8 border-t border-gray-200 dark:border-gray-800">
+                  <h3 className="font-serif text-xl mb-3 text-accent font-medium">Author's Note</h3>
+                  <p className="font-serif text-base leading-relaxed text-gray-700 dark:text-gray-300 italic">
+                    {piece.afterword}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 3. INVESTIGATION MODE: Rigorous reporting centerpiece */}
+          {mode === "investigation" && (
+            <>
+              <ProseRenderer 
+                content={piece.content}
+                isReadInDark={isReadInDark}
+                onParagraphClick={handleParagraphClick}
+                echoedParagraphs={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
+                mode="investigation"
+              />
+
+              {/* How we reported this (Methodology Disclosure) */}
+              <MethodologyDisclosure methodology={piece.methodology} />
+
+              {/* What we could not establish (Limitations Disclosure) */}
+              <LimitationsDisclosure limitations={piece.limitations} />
+
+              {/* Public Sources (Strictly public citations, never editorialWorkspaces) */}
+              <PublicSources sources={piece.publicSources || (piece.dataSources as any)} />
+
+              {/* Subdued Corrections Notice (if present) */}
+              <CorrectionsNotice corrections={piece.corrections} />
+
+              {piece.footnote && (
+                <div className="mt-10 pt-6 border-t border-gray-100 dark:border-gray-900 text-xs text-gray-500 font-sans">
+                  * {piece.footnote}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 4. FIELD NOTE MODE: Notebook with Observation / Finding / Inference */}
+          {mode === "field-note" && (
+            <>
+              <FieldNoteBlocks 
+                observation={piece.observation}
+                finding={piece.finding}
+                inference={piece.inference}
+                rawContent={piece.content}
+              />
+
+              {piece.footnote && (
+                <div className="mt-10 pt-6 border-t border-gray-100 dark:border-gray-900 text-xs text-gray-500 font-sans">
+                  * {piece.footnote}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 5. DATA STORY MODE: Analytical disclosure & visualization slot */}
+          {mode === "data-story" && (
+            <>
+              <DataStoryMetadata 
+                datasetName={piece.datasetName}
+                dataSource={piece.dataSource}
+                dataTimeframe={piece.dataTimeframe}
+                dataUnits={piece.dataUnits}
+                dataConfig={piece.dataConfig}
+              />
+
+              <ProseRenderer 
+                content={piece.content}
+                isReadInDark={isReadInDark}
+                onParagraphClick={handleParagraphClick}
+                echoedParagraphs={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
+                mode="data-story"
+              />
+
+              <MethodologyDisclosure methodology={piece.methodology} />
+              <LimitationsDisclosure limitations={piece.limitations} />
+              <PublicSources sources={piece.publicSources || (piece.dataSources as any)} />
+            </>
           )}
         </motion.div>
-
       </motion.article>
 
+      {/* Global Comments Section (Universal across all modes) */}
       {!isZenMode && (
-        <div className="relative w-full max-w-[700px] mx-auto bg-transparent border-t border-gray-200 dark:border-gray-800 pb-24 mt-16 pt-16">
-          <CommentsSection poemId={poem.id} />
+        <div className="relative w-full max-w-[820px] mx-auto bg-transparent border-t border-gray-200 dark:border-gray-800 pb-24 mt-16 pt-16 px-6 sm:px-10">
+          <CommentsSection poemId={piece.id} />
         </div>
       )}
 
-      {/* Echoes Panel Side Flyout */}
+      {/* Echoes Marginalia Panel Side Flyout (Universal across all modes) */}
       <EchoesPanel 
-        poemId={poem.id}
+        poemId={piece.id}
         lineIndex={selectedLineIndex}
         lineText={selectedLineText}
         comments={comments}
@@ -571,7 +690,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         onRefresh={fetchCommentsData}
       />
 
-      {/* Save to Collection Modal */}
+      {/* Save to Collection / Anthology Modal */}
       <AnimatePresence>
         {isCollectionModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -589,7 +708,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
               className="relative bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl"
             >
               <h2 className="font-serif text-3xl mb-2">Save to Anthology</h2>
-              <p className="text-secondary mb-6">Choose a collection to save "{poem.title}" to.</p>
+              <p className="text-secondary mb-6">Choose an anthology to save "{piece.title}" to.</p>
 
               {collections.length > 0 ? (
                 <div className="space-y-2 mb-6 max-h-[40vh] overflow-y-auto">
@@ -600,7 +719,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
                       className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-black dark:hover:border-white transition-colors flex justify-between items-center"
                     >
                       <span className="font-medium">{col.title}</span>
-                      <span className="text-xs text-secondary">{col.poemIds.length} poems</span>
+                      <span className="text-xs text-secondary">{col.poemIds.length} pieces</span>
                     </button>
                   ))}
                 </div>
@@ -638,7 +757,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete / Burn Page Modal */}
       <AnimatePresence>
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -657,11 +776,11 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
             >
               <div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div>
               <h2 className="font-serif text-2xl mb-4 text-red-600 dark:text-red-500">Burn this page?</h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
-                Are you sure you want to completely tear out this page? It will be permanently removed from your collection and cannot be recovered.
+              <p className="text-gray-600 dark:text-gray-400 mb-8 leading-relaxed font-sans text-sm">
+                Are you sure you want to completely tear out this piece? It will be permanently removed from Marrgin and cannot be recovered.
               </p>
               
-              <div className="flex gap-4">
+              <div className="flex gap-4 font-sans text-sm">
                 <button 
                   onClick={() => setShowDeleteConfirm(false)}
                   className="flex-1 px-4 py-3 rounded-xl bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
@@ -672,7 +791,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
                   onClick={handleDelete}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30"
                 >
-                  <Trash2 size={18} />
+                  <Trash2 size={16} />
                   Burn Page
                 </button>
               </div>

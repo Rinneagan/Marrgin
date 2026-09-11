@@ -1,0 +1,163 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // -------------------------------------------------------------
+    // SINGLE AUTHORITATIVE ADMINISTRATOR UID
+    // Invariant: ONE ADMIN UID -> ALL EDITORIAL AUTHORITY
+    // Mutable emails, custom claims, and fallback strings are eliminated.
+    // -------------------------------------------------------------
+    function isAdmin() {
+      return isAuthenticated() && request.auth.uid == 'O0ePpSc6JTUrMKZ0cLZ2FM7eGPh2';
+    }
+
+    // A piece is public only if it is published and not vaulted.
+    // Legacy documents lacking 'status' or 'isVaulted' are backward-compatible published poems.
+    function isPublicPiece() {
+      return (!('isVaulted' in resource.data) || resource.data.isVaulted != true) &&
+             (!('status' in resource.data) || resource.data.status == 'published');
+    }
+
+    // -------------------------------------------------------------
+    // 1. PUBLIC PIECES & POEMS: /poems/{pieceId}
+    // -------------------------------------------------------------
+    match /poems/{pieceId} {
+      // Rejects drafts, archived pieces, and vaulted pieces for unauthorized readers at database level
+      allow read: if isPublicPiece() || isAdmin();
+
+      // Only the single administrator can create or delete pieces
+      allow create, delete: if isAdmin();
+
+      // Updates permitted for Admin (editorial changes) or readers (atomic metric counters only)
+      allow update: if isAdmin() || (
+        // Public reader analytics: increment readsCount, totalReadTime, completionsCount
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readsCount', 'totalReadTime', 'completionsCount'])
+      ) || (
+        // Authenticated reader likes
+        isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount'])
+      );
+
+      // Legacy poem subcollection comments (preserved for backward-compatibility)
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+      }
+
+      // Likes subcollection
+      match /likes/{userId} {
+        allow read: if true;
+        allow write: if isAuthenticated() && request.auth.uid == userId;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2. PRIVATE EDITORIAL WORKSPACE: /editorialWorkspaces/{pieceId}/...
+    // Strictly restricted to the single administrator.
+    // Unauthenticated or public requests are denied at the database level.
+    // -------------------------------------------------------------
+    match /editorialWorkspaces/{pieceId} {
+      allow read, write: if isAdmin();
+
+      match /{allSubcollections=**} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 3. PUBLIC COMMENTS: /comments/{commentId}
+    // Public readers can ONLY read approved comments.
+    // Direct client writes are blocked (must be created via trusted /api/comments endpoint).
+    // Admin retains full moderation, hide, and delete authority.
+    // -------------------------------------------------------------
+    match /comments/{commentId} {
+      allow read: if resource.data.status == 'approved' || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 4. PRIVATE ANONYMOUS VISITORS: /anonymousVisitors/{visitorId}
+    // Identity mapping is strictly private to the server and administrator.
+    // Public visitors cannot read, write, or enumerate visitor records.
+    // -------------------------------------------------------------
+    match /anonymousVisitors/{visitorId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 5. PRIVATE COMMENT NAME POOL: /commentNames/{nameId}
+    // Curated literary pseudonym pool is private to server and administrator.
+    // -------------------------------------------------------------
+    match /commentNames/{nameId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 6. PRIVATE RATE LIMITS: /rateLimits/{visitorHash}
+    // Persistent abuse-prevention records private to server and administrator.
+    // -------------------------------------------------------------
+    match /rateLimits/{visitorHash} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 7. PRIVATE ADMIN CONFIG: /adminConfig/{docId}
+    // Administrative configuration strictly restricted to administrator.
+    // -------------------------------------------------------------
+    match /adminConfig/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 8. USER PROFILES & SUBCOLLECTIONS
+    // -------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /{allUserSubcollections=**} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 9. COLLECTIONS / ANTHOLOGIES
+    // -------------------------------------------------------------
+    match /collections/{collectionId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // 10. NOTIFICATIONS & STATISTICS
+    // -------------------------------------------------------------
+    match /statistics/{statDoc} {
+      allow read, write: if true;
+    }
+
+    match /siteNotifications/{notifId} {
+      allow read, write: if true;
+    }
+
+    match /adminNotifications/{notifId} {
+      allow read, write: if true;
+    }
+  }
+}

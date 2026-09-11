@@ -87,12 +87,12 @@ export default function CollectionDetailPage() {
                     </span>
                   )}
                   <span className="text-xs font-medium bg-white/20 backdrop-blur-md text-white px-3 py-1 rounded-full uppercase tracking-wider">
-                    {poems.length} Poems
+                    {poems.length} {poems.length === 1 ? "Piece" : "Pieces"}
                   </span>
                 </div>
                 <h1 className="font-serif text-5xl md:text-7xl text-white mb-4 shadow-sm">{collection.title}</h1>
                 <p className="text-xl text-white/80 max-w-2xl font-light">
-                  {collection.description || "A curated collection of verses."}
+                  {collection.description || "A curated collection of writing and reporting."}
                 </p>
               </div>
               <div className="flex items-center gap-4">
@@ -124,24 +124,36 @@ export default function CollectionDetailPage() {
             <p className="text-secondary text-lg">This anthology is currently empty.</p>
           </div>
         ) : (
-          <div className="space-y-8">
-            {poems.map((poem, index) => (
+          <div className="space-y-6">
+            {poems.map((piece: any, index) => (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                key={poem.id}
+                key={piece.id}
               >
-                <Link href={`/read/${poem.id}`} className="block group">
-                  <div className="flex flex-col md:flex-row md:items-center gap-6 p-6 rounded-2xl border border-transparent hover:border-gray-200 dark:hover:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all">
-                    <div className="text-4xl font-serif text-gray-200 dark:text-gray-800 font-light w-12">
+                <Link href={`/read/${piece.id}`} className="block group">
+                  <div className="flex flex-col md:flex-row md:items-start gap-6 p-6 rounded-2xl border border-gray-200/60 dark:border-gray-800/60 hover:border-amber-500/40 dark:hover:border-amber-500/30 hover:bg-neutral-50/50 dark:hover:bg-neutral-900/40 transition-all">
+                    <div className="text-3xl font-serif text-neutral-300 dark:text-neutral-700 font-light w-10 pt-0.5">
                       {(index + 1).toString().padStart(2, '0')}
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-serif text-2xl mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{poem.title}</h3>
-                      <p className="text-sm text-secondary uppercase tracking-widest mb-3">By {poem.authorName}</p>
-                      <p className="text-gray-600 dark:text-gray-400 line-clamp-2">
-                        {poem.content.replace(/<[^>]+>/g, '').substring(0, 150)}...
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-amber-900 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          {piece.mode || "Poetry"}
+                        </span>
+                        {piece.location && (
+                          <span className="text-[11px] text-neutral-400">· {piece.location}</span>
+                        )}
+                      </div>
+                      <h3 className="font-serif text-2xl mb-1 text-neutral-900 dark:text-neutral-100 group-hover:text-amber-900 dark:group-hover:text-amber-400 transition-colors">
+                        {piece.title}
+                      </h3>
+                      <p className="text-xs text-neutral-500 uppercase tracking-widest mb-2">
+                        By {piece.authorName || "Marrgin"}
+                      </p>
+                      <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2 leading-relaxed">
+                        {piece.subtitle || piece.centralQuestion || piece.content?.replace(/<[^>]+>/g, '').substring(0, 150) + "..."}
                       </p>
                     </div>
                   </div>

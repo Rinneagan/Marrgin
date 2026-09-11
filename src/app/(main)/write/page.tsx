@@ -1,640 +1,888 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { createPoem, getUserProfile } from "@/lib/db";
-import { useRouter } from "next/navigation";
-import { Lock, Type, Fingerprint, Activity, Ghost, UserCircle, Scissors, FileSearch } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useRouter, useSearchParams } from "next/navigation";
+import { 
+  getDeskPieces, 
+  unpublishPiece, 
+  archivePiece, 
+  deletePieceWithWorkspace,
+  savePiece, 
+  getPoemById, 
+  generatePieceId, 
+  assertPieceDraftExists,
+  Piece, 
+  EditorialMode 
+} from "@/lib/db";
+import { 
+  parseContentToBlocks, 
+  serializeBlocksToContent, 
+  StudioBlock 
+} from "@/lib/studioBlocks";
+import { 
+  ArrowLeft, 
+  Settings, 
+  Eye, 
+  Send, 
+  Check, 
+  Clock, 
+  AlertCircle,
+  Heading2, 
+  Heading3, 
+  Bold, 
+  Italic, 
+  Quote, 
+  List, 
+  Minus, 
+  Link as LinkIcon,
+  Shield,
+  RotateCw,
+  Maximize2,
+  Minimize2,
+  Share2,
+  Feather
+} from "lucide-react";
+import WritingDeskDashboard from "@/components/WritingDeskDashboard";
+import PieceSettingsDrawer from "@/components/PieceSettingsDrawer";
+import PiecePreviewModal from "@/components/PiecePreviewModal";
+import PublishConfirmationModal from "@/components/PublishConfirmationModal";
+import EditorialWorkspaceDrawer from "@/components/EditorialWorkspaceDrawer";
+import AdminAccountModal from "@/components/AdminAccountModal";
+import { BlockCanvas } from "@/components/studio/BlockCanvas";
+import { SocialPreviewModal } from "@/components/studio/SocialPreviewModal";
 
-// Simple syllable counter
-const countSyllables = (word: string) => {
-  word = word.toLowerCase().replace(/[^a-z]/g, "");
-  if (!word) return 0;
-  if (word.length <= 3) return 1;
-  word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "");
-  word = word.replace(/^y/, "");
-  return word.match(/[aeiouy]{1,2}/g)?.length || 1;
-};
+const SINGLE_ADMIN_UID = "O0ePpSc6JTUrMKZ0cLZ2FM7eGPh2";
 
-const countLineSyllables = (line: string) => {
-  const words = line.split(/\s+/).filter(w => w.length > 0);
-  return words.reduce((acc, word) => acc + countSyllables(word), 0);
-};
-
-// Simple rhyme group assignment (very basic, just matches last 2-3 letters)
-const getRhymeGroup = (word: string) => {
-  const w = word.toLowerCase().replace(/[^a-z]/g, "");
-  if (w.length < 3) return w;
-  // Match last vowel and everything after
-  const match = w.match(/[aeiouy][^aeiouy]*$/);
-  return match ? match[0] : w;
-};
-
-export default function WritePage() {
-  const { user } = useAuth();
+function WritingDeskContent() {
+  const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentPieceIdFromUrl = searchParams.get("id");
+
+  // Invariant: ONE ADMIN UID -> ALL EDITORIAL AUTHORITY
+  const isAdmin = user?.uid === SINGLE_ADMIN_UID;
+  const userDisplayName = user?.displayName || (user?.email ? user.email.split("@")[0] : "Author");
+
+  // Admin Account Modal State
+  const [isAdminAccountModalOpen, setIsAdminAccountModalOpen] = useState(false);
+
+  // Dashboard Data State
+  const [deskData, setDeskData] = useState<{ drafts: Piece[]; published: Piece[]; archived: Piece[]; scheduled: Piece[] }>({
+    drafts: [],
+    published: [],
+    archived: [],
+    scheduled: [],
+  });
+  const [isDeskLoading, setIsDeskLoading] = useState(true);
+
+  // Active Piece Editor State
+  const [activePieceId, setActivePieceId] = useState<string | null>(currentPieceIdFromUrl);
+  const [mode, setMode] = useState<EditorialMode>("poetry");
+  const [status, setStatus] = useState<"draft" | "published" | "archived" | "scheduled">("draft");
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  const [publishedAt, setPublishedAt] = useState<any>(null);
   const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [content, setContent] = useState("");
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [blocks, setBlocks] = useState<StudioBlock[]>([]);
+  const [location, setLocation] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
+  const [coverImage, setCoverImage] = useState("");
+  const [isFeatured, setIsFeatured] = useState(false);
+
+  // Zen Mode (Distraction-free)
+  const [isZenMode, setIsZenMode] = useState(false);
+
+  // Mode Specific Fields
+  const [epigraph, setEpigraph] = useState("");
+  const [dedication, setDedication] = useState("");
+  const [footnote, setFootnote] = useState("");
+  const [afterword, setAfterword] = useState("");
   const [isVaulted, setIsVaulted] = useState(false);
   const [passphrase, setPassphrase] = useState("");
-  const [aesthetic, setAesthetic] = useState("default");
-  const [weather, setWeather] = useState("none");
-  const [hasTranslation, setHasTranslation] = useState(false);
-  const [translationContent, setTranslationContent] = useState("");
-  const [isScrapbook, setIsScrapbook] = useState(false);
-  const [scrapbookElements, setScrapbookElements] = useState<{id: string, x: number, y: number, text: string}[]>([]);
-  const [epigraph, setEpigraph] = useState("");
-  const [footnote, setFootnote] = useState("");
-  const [dedication, setDedication] = useState("");
-  const [afterword, setAfterword] = useState("");
-  const [location, setLocation] = useState("");
+  const [centralQuestion, setCentralQuestion] = useState("");
+  const [methodology, setMethodology] = useState("");
+  const [limitations, setLimitations] = useState("");
+  const [observationDate, setObservationDate] = useState(new Date().toISOString().split("T")[0]);
+  const [datasetName, setDatasetName] = useState("");
+  const [dataSource, setDataSource] = useState("");
+  const [dataUnits, setDataUnits] = useState("");
+  const [dataTimeframe, setDataTimeframe] = useState("");
 
-  // Phase 11 Features
-  const [isTypewriterMode, setIsTypewriterMode] = useState(false);
-  const [isHaikuMode, setIsHaikuMode] = useState(false);
-  const [isRhymeMode, setIsRhymeMode] = useState(false);
-  const [isBlackoutMode, setIsBlackoutMode] = useState(false);
-  const [blackoutIndices, setBlackoutIndices] = useState<Set<number>>(new Set());
-  
-  // Phase 13 Features
-  const [coverImagePrompt, setCoverImagePrompt] = useState("");
-  const [coverImage, setCoverImage] = useState("");
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  
-  // Phase 8 Features
-  const [isAnonymous, setIsAnonymous] = useState(false);
-  const [penNames, setPenNames] = useState<string[]>([]);
-  const [selectedPenName, setSelectedPenName] = useState("");
+  // UI Modals & Drawers
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const [isWorkspaceDrawerOpen, setIsWorkspaceDrawerOpen] = useState(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isSocialPreviewOpen, setIsSocialPreviewOpen] = useState(false);
 
-  const adminEmails = process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(",").map(e => e.trim().toLowerCase()) || [];
-  const isAdmin = user?.email && adminEmails.includes(user.email.toLowerCase());
+  // Autosave & Persistence State
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "error">("saved");
+  const [lastSavedTime, setLastSavedTime] = useState<string>("");
+  const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasPendingChangesRef = useRef(false);
 
+  // Auth gate
   useEffect(() => {
-    // Wait until auth state is definitively loaded
-    if (user !== undefined && !isAdmin) {
+    if (!loading && !isAdmin) {
       router.push("/home");
     }
-    
-    // Fetch profile for Pen Names
-    if (isAdmin && user) {
-      getUserProfile(user.uid).then((profile: any) => {
-        if (profile) {
-          setPenNames(profile.penNames || [profile.displayName || "Anonymous"]);
-          setSelectedPenName(profile.currentPenName || profile.displayName || "Anonymous");
-        }
+  }, [user, loading, isAdmin, router]);
+
+  // Load Dashboard Pieces
+  const refreshDeskData = useCallback(async () => {
+    if (!user) return;
+    setIsDeskLoading(true);
+    try {
+      const data = await getDeskPieces(user.uid, Boolean(isAdmin));
+      setDeskData({
+        drafts: data.drafts || [],
+        published: data.published || [],
+        archived: data.archived || [],
+        scheduled: data.scheduled || [],
       });
+    } catch (err) {
+      console.error("Failed to load desk data:", err);
+    } finally {
+      setIsDeskLoading(false);
     }
-  }, [user, isAdmin, router]);
+  }, [user, isAdmin]);
 
-  if (!isAdmin) {
-    return null; // Return nothing while redirecting
-  }
+  useEffect(() => {
+    if (user && isAdmin) {
+      refreshDeskData();
+    }
+  }, [user, isAdmin, refreshDeskData]);
 
-  const handlePublish = async () => {
-    if (!user || !title.trim() || !content.trim()) return;
-    if (isVaulted && !passphrase.trim()) {
-      alert("Please provide a passphrase for the vaulted poem.");
+  // Keep activePieceId in sync with URL
+  useEffect(() => {
+    if (currentPieceIdFromUrl && currentPieceIdFromUrl !== activePieceId) {
+      setActivePieceId(currentPieceIdFromUrl);
+    } else if (!currentPieceIdFromUrl && activePieceId) {
+      setActivePieceId(null);
+    }
+  }, [currentPieceIdFromUrl, activePieceId]);
+
+  // Load Piece Data when activePieceId changes
+  useEffect(() => {
+    if (!activePieceId) return;
+
+    let isMounted = true;
+    getPoemById(activePieceId, true).then((piece) => {
+      if (!isMounted || !piece) return;
+      const pieceMode = piece.mode || "poetry";
+      const rawContent = piece.content || "";
+
+      setTitle(piece.title || "");
+      setSubtitle(piece.subtitle || "");
+      setContent(rawContent);
+      setBlocks(parseContentToBlocks(rawContent, pieceMode));
+      setMode(pieceMode);
+      setStatus(piece.status || "draft");
+      setScheduledAt(piece.scheduledAt || null);
+      setPublishedAt(piece.publishedAt || null);
+      setLocation(piece.location || "");
+      setTagsInput(piece.tags?.join(", ") || "");
+      setCoverImage(piece.coverImage || "");
+      setIsFeatured(Boolean((piece as any).isFeatured));
+      setEpigraph(piece.epigraph || "");
+      setDedication(piece.dedication || "");
+      setFootnote(piece.footnote || "");
+      setAfterword(piece.afterword || "");
+      setIsVaulted(Boolean(piece.isVaulted));
+      setPassphrase(piece.passphrase || "");
+      setCentralQuestion(piece.centralQuestion || "");
+      setMethodology(piece.methodology || "");
+      setLimitations(piece.limitations || "");
+      setObservationDate(piece.dateObserved || new Date().toISOString().split("T")[0]);
+      setDatasetName(piece.datasetName || "");
+      setDataSource(piece.dataSource || "");
+      setDataUnits(piece.dataUnits || "");
+      setDataTimeframe(piece.dataTimeframe || "");
+      setSaveStatus("saved");
+      hasPendingChangesRef.current = false;
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activePieceId]);
+
+  // Construct current Piece object snapshot
+  const getCurrentPieceSnapshot = useCallback((): Partial<Piece> => {
+    const tags = tagsInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    return {
+      id: activePieceId || undefined,
+      title,
+      subtitle,
+      content,
+      mode,
+      status,
+      scheduledAt: scheduledAt || null,
+      publishedAt: publishedAt || null,
+      location,
+      tags,
+      coverImage,
+      isVaulted,
+      passphrase: isVaulted ? passphrase.trim() : "",
+      epigraph,
+      dedication,
+      footnote,
+      afterword,
+      centralQuestion,
+      methodology,
+      limitations,
+      dateObserved: observationDate,
+      datasetName,
+      dataSource,
+      dataUnits,
+      dataTimeframe,
+      authorId: user?.uid || "anonymous",
+      authorName: userDisplayName,
+      ...(isFeatured ? { isFeatured: true } : { isFeatured: false }),
+    } as any;
+  }, [
+    activePieceId, title, subtitle, content, mode, status, scheduledAt, publishedAt,
+    location, tagsInput, coverImage, isVaulted, passphrase, epigraph, dedication,
+    footnote, afterword, centralQuestion, methodology, limitations, observationDate,
+    datasetName, dataSource, dataUnits, dataTimeframe, user, userDisplayName, isFeatured
+  ]);
+
+  // Core Persistent Save Implementation
+  const performSave = useCallback(async (
+    customStatus?: "draft" | "published" | "archived" | "scheduled",
+    customScheduledAt?: string
+  ) => {
+    if (!activePieceId || !user) return;
+    setSaveStatus("saving");
+    try {
+      const snapshot = getCurrentPieceSnapshot();
+      if (customStatus) {
+        snapshot.status = customStatus;
+      }
+      if (customScheduledAt !== undefined) {
+        snapshot.scheduledAt = customScheduledAt;
+      }
+      await savePiece(activePieceId, snapshot);
+      hasPendingChangesRef.current = false;
+      setSaveStatus("saved");
+      const now = new Date();
+      setLastSavedTime(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      if (customStatus) {
+        setStatus(customStatus);
+      }
+      if (customScheduledAt !== undefined) {
+        setScheduledAt(customScheduledAt);
+      }
+    } catch (err) {
+      console.error("Autosave failed:", err);
+      setSaveStatus("error");
+    }
+  }, [activePieceId, user, getCurrentPieceSnapshot]);
+
+  // Debounced Autosave Trigger (1500ms)
+  const triggerAutosave = useCallback(() => {
+    hasPendingChangesRef.current = true;
+    setSaveStatus("unsaved");
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+    autosaveTimeoutRef.current = setTimeout(() => {
+      performSave();
+    }, 1500);
+  }, [performSave]);
+
+  // Handle Block Changes from Studio Canvas
+  const handleBlocksChange = (newBlocks: StudioBlock[]) => {
+    setBlocks(newBlocks);
+    const serialized = serializeBlocksToContent(newBlocks, mode);
+    setContent(serialized);
+    triggerAutosave();
+  };
+
+  // Warn on page unload if changes are pending
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasPendingChangesRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + S: Force immediate save
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && !e.shiftKey) {
+        e.preventDefault();
+        if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+        performSave();
+        return;
+      }
+
+      // Cmd/Ctrl + P: Toggle Reader Preview
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p" && !e.shiftKey) {
+        e.preventDefault();
+        setIsPreviewModalOpen((prev) => !prev);
+        return;
+      }
+
+      // Cmd/Ctrl + Shift + F: Toggle Zen Mode
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setIsZenMode((prev) => !prev);
+        return;
+      }
+
+      // Escape: Exit Zen mode if active
+      if (e.key === "Escape" && isZenMode) {
+        setIsZenMode(false);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isZenMode, performSave]);
+
+  // Escape Path: Navigating back to Writing Desk safely
+  const handleReturnToDesk = async () => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+    if (hasPendingChangesRef.current) {
+      setSaveStatus("saving");
+      await performSave();
+    }
+    setActivePieceId(null);
+    setIsZenMode(false);
+    window.history.pushState(null, "", "/write");
+    refreshDeskData();
+  };
+
+  // Open a piece from the dashboard
+  const handleOpenPiece = (pieceId: string) => {
+    setActivePieceId(pieceId);
+    window.history.pushState(null, "", `/write?id=${pieceId}`);
+  };
+
+  // Delete draft with workspace cascade
+  const handleDeleteDraft = async (pieceId: string) => {
+    if (!confirm("Permanently delete this draft and any associated private workspace materials? This cannot be undone.")) {
       return;
     }
-    
-    setIsPublishing(true);
     try {
-      const displayName = selectedPenName || (user.email ? user.email.split("@")[0] : "Anonymous");
-      
-      // Apply blackout before publishing
-      let finalContent = content;
-      if (isBlackoutMode) {
-        finalContent = content.split(/\s+/).map((word, i) => {
-          return blackoutIndices.has(i) ? "█".repeat(word.length) : word;
-        }).join(" ");
+      await deletePieceWithWorkspace(pieceId);
+      if (activePieceId === pieceId) {
+        setActivePieceId(null);
+        window.history.pushState(null, "", "/write");
       }
-
-      await createPoem(
-        user.uid, 
-        displayName, 
-        title, 
-        finalContent, 
-        isVaulted, 
-        isVaulted ? passphrase.trim() : undefined, 
-        aesthetic, 
-        isAnonymous, 
-        weather, 
-        hasTranslation ? translationContent : undefined,
-        isScrapbook,
-        scrapbookElements,
-        epigraph.trim(),
-        footnote.trim(),
-        dedication.trim(),
-        afterword.trim(),
-        location.trim(),
-        coverImage
-      );
-      
-      if (isVaulted) {
-        // Automatically unlock vault for the current session if they just published to it
-        sessionStorage.setItem("vaultUnlocked", passphrase.trim());
-        router.push("/vault/feed");
-      } else {
-        router.push("/home");
-      }
-    } catch (error) {
-      console.error("Failed to publish poem", error);
-      alert("Failed to publish poem. Please try again.");
-    } finally {
-      setIsPublishing(false);
+      refreshDeskData();
+    } catch (err) {
+      console.error("Failed to delete draft:", err);
+      alert("Error deleting draft.");
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (isTypewriterMode) {
-      if (e.key === "Backspace" || e.key === "Delete") {
-        e.preventDefault();
-      }
+  // Unpublish a piece back to draft
+  const handleUnpublishPiece = async (pieceId: string) => {
+    if (!confirm("Unpublish this piece? It will be returned to your private drafts and will no longer be visible to public readers.")) {
+      return;
     }
-  };
-
-  // Analyze content for sidebar stats
-  const lines = content.split('\n');
-  const rhymeGroups = new Map<string, string>();
-  const colors = ["text-red-400", "text-blue-400", "text-green-400", "text-yellow-400", "text-purple-400"];
-  let colorIndex = 0;
-
-  const generateFoundPoetry = () => {
-    const headlines = [
-      "The world is quiet here",
-      "Echoes of a distant sun",
-      "City sleeps while shadows dance",
-      "Time slips through our fingers like sand",
-      "A sudden storm washes it all away"
-    ];
-    // Shuffle and pick 5
-    const selected = headlines.sort(() => 0.5 - Math.random()).slice(0, 5);
-    setContent(selected.join("\n\n"));
-  };
-
-  const handleBlackoutClick = (index: number) => {
-    setBlackoutIndices(prev => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  };
-
-  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Only add if clicking directly on the canvas background, not existing elements
-    if (e.target === e.currentTarget) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      setScrapbookElements([...scrapbookElements, { id: Date.now().toString(), x, y, text: "" }]);
-    }
-  };
-
-  const updateScrapbookElement = (id: string, text: string) => {
-    setScrapbookElements(prev => prev.map(el => el.id === id ? { ...el, text } : el));
-  };
-
-  const handleDragEnd = (id: string, e: any, info: any) => {
-    setScrapbookElements(prev => prev.map(el => {
-      if (el.id === id) {
-        return { ...el, x: el.x + info.offset.x, y: el.y + info.offset.y };
-      }
-      return el;
-    }));
-  };
-
-  const handleGenerateCover = async () => {
-    if (!coverImagePrompt.trim()) return;
-    setIsGeneratingImage(true);
     try {
-      // Use pollinations.ai for free no-key AI image generation
-      // Append a random seed to avoid browser caching if they generate multiple times
-      const seed = Math.floor(Math.random() * 1000000);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(coverImagePrompt)}?seed=${seed}&width=1200&height=800&nologo=true`;
-      
-      // We can pre-load the image to ensure it's ready before showing it
-      const img = new Image();
-      img.src = url;
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-      });
-      
-      setCoverImage(url);
-    } catch (e) {
-      console.error("Failed to generate image", e);
-      alert("Failed to generate cover image. Please try again.");
-    } finally {
-      setIsGeneratingImage(false);
+      await unpublishPiece(pieceId);
+      if (activePieceId === pieceId) {
+        setStatus("draft");
+      }
+      refreshDeskData();
+    } catch (err) {
+      console.error("Failed to unpublish piece:", err);
+      alert("Error unpublishing piece.");
     }
   };
+
+  // Archive a piece
+  const handleArchivePiece = async (pieceId: string) => {
+    try {
+      await archivePiece(pieceId);
+      if (activePieceId === pieceId) {
+        setStatus("archived");
+      }
+      refreshDeskData();
+    } catch (err) {
+      console.error("Failed to archive piece:", err);
+      alert("Error archiving piece.");
+    }
+  };
+
+  // Publishing Confirmation Workflow
+  const handleConfirmPublish = async (options?: { scheduledAt?: string }) => {
+    if (!title.trim() || !content.trim()) {
+      alert("Please provide both a title and content before publishing.");
+      return;
+    }
+    if (isVaulted && !passphrase.trim()) {
+      alert("Please provide a passphrase for the vaulted piece.");
+      return;
+    }
+
+    if (options?.scheduledAt) {
+      await performSave("scheduled", options.scheduledAt);
+      setIsPublishModalOpen(false);
+      refreshDeskData();
+      alert(`Piece scheduled for publication on ${new Date(options.scheduledAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.`);
+    } else {
+      await performSave("published");
+      setIsPublishModalOpen(false);
+      refreshDeskData();
+      alert("Piece published successfully across Marrgin.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center font-serif text-neutral-400">
+        Loading Writer Desk...
+      </div>
+    );
+  }
+
+  if (!isAdmin) return null;
+
+  // -------------------------------------------------------------------------
+  // VIEW 1: THE WRITING DESK (DASHBOARD)
+  // -------------------------------------------------------------------------
+  if (!activePieceId) {
+    const previewSnapshot: Piece = {
+      id: "preview",
+      title: title || "Untitled Piece",
+      subtitle,
+      content,
+      mode,
+      status: "draft",
+      authorId: user?.uid || "anonymous",
+      authorName: userDisplayName,
+      createdAt: new Date(),
+      likesCount: 0,
+      readsCount: 0,
+      totalReadTime: 0,
+      completionsCount: 0,
+      location,
+      tags: tagsInput.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean),
+      coverImage,
+      epigraph,
+      dedication,
+      footnote,
+      afterword,
+      centralQuestion,
+      methodology,
+      limitations,
+    };
+
+    return (
+      <>
+        <WritingDeskDashboard
+          drafts={deskData.drafts}
+          published={deskData.published}
+          archived={deskData.archived}
+          scheduled={deskData.scheduled}
+          isLoading={isDeskLoading}
+          onOpenPiece={handleOpenPiece}
+          onDeleteDraft={handleDeleteDraft}
+          onUnpublishPiece={handleUnpublishPiece}
+          onArchivePiece={handleArchivePiece}
+          onPreviewPiece={(piece) => {
+            setTitle(piece.title || "");
+            setSubtitle(piece.subtitle || "");
+            setContent(piece.content || "");
+            setMode(piece.mode || "poetry");
+            setLocation(piece.location || "");
+            setEpigraph(piece.epigraph || "");
+            setDedication(piece.dedication || "");
+            setFootnote(piece.footnote || "");
+            setAfterword(piece.afterword || "");
+            setCentralQuestion(piece.centralQuestion || "");
+            setMethodology(piece.methodology || "");
+            setLimitations(piece.limitations || "");
+            setIsPreviewModalOpen(true);
+          }}
+          onOpenAdminAccount={() => setIsAdminAccountModalOpen(true)}
+          userDisplayName={userDisplayName}
+        />
+        {user && (
+          <AdminAccountModal
+            isOpen={isAdminAccountModalOpen}
+            onClose={() => setIsAdminAccountModalOpen(false)}
+            user={user}
+          />
+        )}
+        <PiecePreviewModal
+          isOpen={isPreviewModalOpen}
+          onClose={() => setIsPreviewModalOpen(false)}
+          piece={previewSnapshot}
+        />
+      </>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // VIEW 2: MARRGIN AUTHORING STUDIO
+  // -------------------------------------------------------------------------
+  const pieceSnapshot = getCurrentPieceSnapshot() as Piece;
 
   return (
-    <>
-      <AnimatePresence>
-        {isTypewriterMode && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8 }}
-            className="fixed inset-0 z-[100] bg-[#fdfbf7] dark:bg-[#0a0a0a] flex flex-col items-center justify-center overflow-hidden"
-          >
-            <div className="absolute top-8 right-8 z-[101]">
-              <button 
-                onClick={() => setIsTypewriterMode(false)}
-                className="opacity-0 hover:opacity-100 transition-opacity duration-300 px-6 py-2 border border-gray-300 dark:border-gray-800 rounded-full font-mono text-sm text-gray-500 hover:text-black dark:hover:text-white"
+    <div className={`min-h-screen flex flex-col bg-background text-neutral-900 dark:text-neutral-100 transition-colors ${
+      isZenMode ? "fixed inset-0 z-50 overflow-y-auto bg-white dark:bg-neutral-950" : ""
+    }`}>
+      {/* Top Action Bar (Hidden or floating in Zen Mode) */}
+      {!isZenMode ? (
+        <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-gray-200/80 dark:border-gray-800/80 px-6 sm:px-10 py-3 flex items-center justify-between">
+          {/* Left: Escape Path back to Desk */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleReturnToDesk}
+              className="inline-flex items-center gap-2 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
+            >
+              <ArrowLeft size={14} />
+              <span>Writing Desk</span>
+            </button>
+
+            {/* Status indicator badge */}
+            <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
+              status === "published"
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+                : status === "scheduled"
+                ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
+                : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500 border-neutral-200 dark:border-neutral-700"
+            }`}>
+              {status}
+            </span>
+          </div>
+
+          {/* Center: Save State Indicator */}
+          <div className="flex items-center gap-1.5 text-xs font-sans text-neutral-400">
+            {saveStatus === "saving" && (
+              <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
+                <RotateCw size={11} className="animate-spin" /> Saving...
+              </span>
+            )}
+            {saveStatus === "saved" && (
+              <button
+                type="button"
+                onClick={() => performSave()}
+                title="Click to force save (Ctrl+S)"
+                className="flex items-center gap-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
               >
-                Exit Typewriter Mode
+                <Check size={12} className="text-emerald-500" />
+                <span>{lastSavedTime ? `Saved at ${lastSavedTime}` : "Saved just now"}</span>
               </button>
-            </div>
-            
-            <div className="w-full max-w-[800px] h-[60vh] relative flex flex-col justify-center">
-              {/* Typewriter specific textarea */}
-              <textarea
-                autoFocus
-                placeholder="Start typing..."
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full bg-transparent outline-none resize-none placeholder:text-gray-300 dark:placeholder:text-gray-800 leading-[3rem] text-3xl md:text-4xl"
-                style={{ 
-                  fontFamily: '"Courier New", Courier, monospace',
-                  color: 'inherit',
-                  height: '100%',
-                  textAlign: 'center'
-                }}
-              />
-            </div>
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 opacity-20 pointer-events-none font-mono text-xs">
-              NO BACKSPACE. JUST WRITE.
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            )}
+            {saveStatus === "unsaved" && (
+              <span className="flex items-center gap-1 text-neutral-400">
+                <Clock size={11} /> Unsaved changes...
+              </span>
+            )}
+            {saveStatus === "error" && (
+              <button
+                onClick={() => performSave()}
+                className="flex items-center gap-1 text-rose-500 hover:underline"
+              >
+                <AlertCircle size={11} /> Failed to save · Click to retry
+              </button>
+            )}
+          </div>
 
-      <div className="py-12 px-8 max-w-[1200px] mx-auto min-h-screen flex flex-col md:flex-row gap-12">
-        <div className="flex-1 flex flex-col">
-          <div className="flex justify-between items-center mb-8">
-          <h1 className="font-serif text-3xl text-gray-400">New Poem</h1>
-          <div className="flex items-center gap-6">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary hover:text-black dark:hover:text-white transition-colors">
-            <input 
-              type="checkbox" 
-              checked={isVaulted} 
-              onChange={(e) => setIsVaulted(e.target.checked)}
-              className="hidden"
-            />
-            <Lock size={16} className={isVaulted ? "text-accent" : ""} />
-            <span className={isVaulted ? "text-accent font-medium" : ""}>Vaulted</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary hover:text-black dark:hover:text-white transition-colors">
-            <input 
-              type="checkbox" 
-              checked={hasTranslation} 
-              onChange={(e) => setHasTranslation(e.target.checked)}
-              className="hidden"
-            />
-            <span className={hasTranslation ? "text-accent font-medium" : ""}>+ Translation</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-secondary hover:text-black dark:hover:text-white transition-colors">
-            <input 
-              type="checkbox" 
-              checked={isScrapbook} 
-              onChange={(e) => setIsScrapbook(e.target.checked)}
-              className="hidden"
-            />
-            <span className={isScrapbook ? "text-accent font-medium" : ""}>Scrapbook</span>
-          </label>
-          <button className="text-secondary hover:text-black transition-colors">
-            Save Draft
-          </button>
-          <button 
-            onClick={handlePublish}
-            disabled={isPublishing || !title.trim() || !content.trim()}
-            className="bg-accent text-white px-6 py-2 rounded-full hover:bg-accent/90 transition-colors disabled:opacity-50"
+          {/* Right: Actions (Zen, Social Preview, Settings, Preview, Publish) */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsZenMode(true)}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-full border border-gray-200 dark:border-gray-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 text-xs font-sans font-medium transition-colors flex items-center gap-1"
+              title="Zen Mode (Ctrl+Shift+F)"
+            >
+              <Maximize2 size={13} />
+              <span className="hidden sm:inline">Zen</span>
+            </button>
+
+            <button
+              onClick={() => setIsSocialPreviewOpen(true)}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-full border border-gray-200 dark:border-gray-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 text-xs font-sans font-medium transition-colors flex items-center gap-1"
+              title="Preview Social & OpenGraph Cards"
+            >
+              <Share2 size={13} />
+              <span className="hidden sm:inline">Social</span>
+            </button>
+
+            {mode === "investigation" && (
+              <button
+                onClick={() => setIsWorkspaceDrawerOpen(true)}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-400 text-xs font-sans font-medium hover:bg-amber-500/20 transition-colors"
+              >
+                <Shield size={13} />
+                <span>Workspace</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setIsSettingsDrawerOpen(true)}
+              className="p-1.5 sm:px-3 sm:py-1.5 rounded-full border border-gray-200 dark:border-gray-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 text-xs font-sans font-medium transition-colors flex items-center gap-1.5"
+              title="Piece Settings"
+            >
+              <Settings size={14} />
+              <span className="hidden sm:inline">Settings</span>
+            </button>
+
+            <button
+              onClick={() => setIsPreviewModalOpen(true)}
+              className="p-1.5 sm:px-3 sm:py-1.5 rounded-full border border-gray-200 dark:border-gray-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 text-xs font-sans font-medium transition-colors flex items-center gap-1.5"
+              title="Preview reading layout (Ctrl+P)"
+            >
+              <Eye size={14} />
+              <span className="hidden sm:inline">Preview</span>
+            </button>
+
+            <button
+              onClick={() => setIsPublishModalOpen(true)}
+              className="px-4 py-1.5 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-neutral-200 text-xs font-sans font-medium transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Send size={12} />
+              <span>
+                {status === "published"
+                  ? "Update"
+                  : status === "scheduled"
+                  ? "Scheduled"
+                  : "Publish"}
+              </span>
+            </button>
+          </div>
+        </header>
+      ) : (
+        /* Floating Zen Mode exit bar */
+        <div className="fixed top-4 right-6 z-40 flex items-center gap-2 bg-neutral-900/80 text-white dark:bg-neutral-100/90 dark:text-neutral-900 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-sans shadow-lg transition-all opacity-40 hover:opacity-100">
+          <span>Zen Mode</span>
+          <span className="text-[10px] opacity-60">(Esc)</span>
+          <button
+            type="button"
+            onClick={() => setIsZenMode(false)}
+            className="p-1 hover:opacity-80 transition-opacity"
+            title="Exit Zen Mode (Esc)"
           >
-            {isPublishing ? "Publishing..." : "Publish"}
+            <Minimize2 size={13} />
           </button>
-        </div>
-      </div>
-
-      <div className="flex gap-4 mb-8">
-        <select 
-          value={aesthetic} 
-          onChange={(e) => setAesthetic(e.target.value)}
-          className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 text-gray-500 rounded-lg px-4 py-2 outline-none hover:border-accent transition-colors cursor-pointer appearance-none"
-        >
-          <option value="default">Default Aesthetic</option>
-          <option value="typewriter">Vintage Typewriter</option>
-          <option value="brutalist">Modern Brutalist</option>
-        </select>
-
-        <select 
-          value={weather} 
-          onChange={(e) => setWeather(e.target.value)}
-          className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 text-gray-500 rounded-lg px-4 py-2 outline-none hover:border-accent transition-colors cursor-pointer appearance-none"
-        >
-          <option value="none">No Weather</option>
-          <option value="rain">Heavy Rain</option>
-          <option value="snow">Gentle Snow</option>
-          <option value="storm">Thunderstorm</option>
-        </select>
-
-        {!isAnonymous && penNames.length > 0 && (
-          <select
-            value={selectedPenName}
-            onChange={(e) => setSelectedPenName(e.target.value)}
-            className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 text-gray-500 rounded-lg px-4 py-2 outline-none hover:border-accent transition-colors cursor-pointer appearance-none"
-          >
-            {penNames.map(name => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      {isVaulted && (
-        <div className="mb-8 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 flex items-center gap-4">
-          <Lock size={20} className="text-gray-400" />
-          <input 
-            type="text"
-            placeholder="Set Passphrase (e.g., 'silence')"
-            value={passphrase}
-            onChange={(e) => setPassphrase(e.target.value)}
-            className="bg-transparent outline-none flex-1 font-medium placeholder:text-gray-400"
-          />
         </div>
       )}
 
+      {/* Main Distraction-Free Authoring Studio Canvas */}
+      <main className="flex-1 max-w-3xl w-full mx-auto px-6 sm:px-8 py-14 flex flex-col">
+        {/* Title Input */}
         <input
           type="text"
-          placeholder="Title"
+          placeholder={mode === "poetry" ? "Poem Title..." : "Title..."}
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full bg-transparent font-serif text-5xl md:text-6xl outline-none placeholder:text-gray-300 mb-8"
+          onChange={(e) => {
+            setTitle(e.target.value);
+            triggerAutosave();
+          }}
+          className="w-full bg-transparent font-serif text-4xl sm:text-5xl lg:text-6xl text-neutral-900 dark:text-neutral-100 outline-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700 mb-4 leading-tight tracking-tight"
         />
 
-        {isScrapbook ? (
-          <div 
-            className="w-full flex-1 min-h-[500px] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl relative overflow-hidden bg-white/5 cursor-crosshair"
-            onClick={handleCanvasClick}
-          >
-            <p className="absolute bottom-4 left-4 text-secondary text-sm pointer-events-none">Click anywhere to drop text. Drag to move.</p>
-            {scrapbookElements.map((el) => (
-              <motion.div
-                key={el.id}
-                drag
-                dragMomentum={false}
-                onDragEnd={(e: any, info: any) => handleDragEnd(el.id, e, info)}
-                initial={{ x: el.x, y: el.y, scale: 0 }}
-                animate={{ scale: 1 }}
-                style={{ position: 'absolute', x: el.x, y: el.y }}
-                className="cursor-move"
-              >
-                <textarea
-                  value={el.text}
-                  onChange={(e) => updateScrapbookElement(el.id, e.target.value)}
-                  placeholder="Type here..."
-                  autoFocus
-                  className="bg-transparent font-poem text-xl outline-none resize-none border-b border-gray-300 focus:border-accent p-1 min-w-[200px]"
-                  onPointerDown={(e) => e.stopPropagation()}
-                />
-              </motion.div>
-            ))}
-          </div>
-        ) : isBlackoutMode ? (
-          <div className="w-full flex-1 min-h-[500px] font-poem text-2xl leading-loose">
-            {content.split(/\s+/).map((word, i) => (
-              <span
-                key={i}
-                onClick={() => handleBlackoutClick(i)}
-                className={`cursor-pointer mr-2 inline-block transition-colors ${blackoutIndices.has(i) ? 'bg-black text-black select-none rounded-sm' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
-              >
-                {word}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <div className={`flex ${hasTranslation ? 'gap-8' : ''}`}>
-            <textarea
-              placeholder="Start writing..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className={`w-full flex-1 bg-transparent font-poem text-2xl outline-none resize-none placeholder:text-gray-300 leading-loose ${hasTranslation ? 'w-1/2 border-r border-gray-100 dark:border-gray-800 pr-4' : ''}`}
-            ></textarea>
-            
-            {hasTranslation && (
-              <textarea
-                placeholder="Translation..."
-                value={translationContent}
-                onChange={(e) => setTranslationContent(e.target.value)}
-                className="w-full flex-1 bg-transparent font-poem text-2xl outline-none resize-none placeholder:text-gray-300 leading-loose w-1/2 pl-4 text-gray-500"
-              ></textarea>
-            )}
-          </div>
+        {/* Subtitle / Dek Input (For non-poetry modes) */}
+        {mode !== "poetry" && (
+          <input
+            type="text"
+            placeholder="Subtitle or dek (one clear, compelling sentence)..."
+            value={subtitle}
+            onChange={(e) => {
+              setSubtitle(e.target.value);
+              triggerAutosave();
+            }}
+            className="w-full bg-transparent font-serif italic text-xl sm:text-2xl text-neutral-500 dark:text-neutral-400 outline-none placeholder:text-neutral-400 dark:placeholder:text-neutral-600 mb-8 border-b border-gray-100 dark:border-gray-900 pb-3"
+          />
         )}
 
-        {/* Phase 12: Publication Metadata */}
-        <div className="mt-12 flex flex-col gap-6 border-t border-gray-100 dark:border-gray-800 pt-8">
-          <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <p className="text-xs uppercase tracking-widest text-secondary font-medium">Context & Lore</p>
-            <input
-              type="text"
-              placeholder="Dedication (e.g. 'For E.')"
-              className="w-full bg-transparent border-b border-gray-200 dark:border-gray-800 py-2 outline-none font-serif text-lg placeholder:text-gray-400"
-              value={dedication}
-              onChange={e => setDedication(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Epigraph (e.g. A quote that inspired this)"
-              className="w-full bg-transparent border-b border-gray-200 dark:border-gray-800 py-2 outline-none font-serif text-lg placeholder:text-gray-400"
-              value={epigraph}
-              onChange={e => setEpigraph(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Footnote (Added to the bottom)"
-              className="w-full bg-transparent border-b border-gray-200 dark:border-gray-800 py-2 outline-none font-serif text-lg placeholder:text-gray-400"
-              value={footnote}
-              onChange={e => setFootnote(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Afterword (Unlocks after reading)"
-              className="w-full bg-transparent border-b border-gray-200 dark:border-gray-800 py-2 outline-none font-serif text-lg placeholder:text-gray-400"
-              value={afterword}
-              onChange={e => setAfterword(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Location Written (e.g. 'Paris, France')"
-              className="w-full bg-transparent border-b border-gray-200 dark:border-gray-800 py-2 outline-none font-serif text-lg placeholder:text-gray-400"
-              value={location}
-              onChange={e => setLocation(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
+        {/* Studio Block Canvas (Replacing plain textarea) */}
+        <BlockCanvas
+          blocks={blocks}
+          mode={mode}
+          onChange={handleBlocksChange}
+        />
+      </main>
 
-      {/* The Writer's Arsenal Sidebar */}
-      <div className="w-full md:w-64 flex flex-col gap-8 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-800 pt-8 md:pt-0 md:pl-8">
-        
-        {/* Phase 8: Privacy Controls */}
-        <h2 className="font-serif text-xl text-gray-400 uppercase tracking-widest">Privacy</h2>
-        <div className="flex flex-col gap-4">
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className={`p-2 rounded-lg transition-colors ${isAnonymous ? 'bg-accent/10 text-accent' : 'bg-gray-50 dark:bg-gray-900 text-gray-400 group-hover:text-black dark:group-hover:text-white'}`}>
-              <Ghost size={18} />
-            </div>
-            <div className="flex flex-col">
-              <span className={`text-sm font-medium ${isAnonymous ? 'text-accent' : 'text-gray-500 group-hover:text-black dark:group-hover:text-white'}`}>Ghost Writer</span>
-              <span className="text-xs text-gray-400">Publish anonymously</span>
-            </div>
-            <input type="checkbox" className="hidden" checked={isAnonymous} onChange={(e) => setIsAnonymous(e.target.checked)} />
-          </label>
-        </div>
+      {/* Slide-out Piece Settings Drawer */}
+      <PieceSettingsDrawer
+        isOpen={isSettingsDrawerOpen}
+        onClose={() => setIsSettingsDrawerOpen(false)}
+        mode={mode}
+        onModeChange={(newMode) => {
+          setMode(newMode);
+          // If switching to/from poetry, adjust blocks model
+          const reParsed = parseContentToBlocks(content, newMode);
+          setBlocks(reParsed);
+          triggerAutosave();
+        }}
+        location={location}
+        onLocationChange={(val) => {
+          setLocation(val);
+          triggerAutosave();
+        }}
+        tagsInput={tagsInput}
+        onTagsInputChange={(val) => {
+          setTagsInput(val);
+          triggerAutosave();
+        }}
+        coverImage={coverImage}
+        onCoverImageChange={(val) => {
+          setCoverImage(val);
+          triggerAutosave();
+        }}
+        isFeatured={isFeatured}
+        onIsFeaturedChange={(val) => {
+          setIsFeatured(val);
+          triggerAutosave();
+        }}
+        epigraph={epigraph}
+        onEpigraphChange={(val) => {
+          setEpigraph(val);
+          triggerAutosave();
+        }}
+        dedication={dedication}
+        onDedicationChange={(val) => {
+          setDedication(val);
+          triggerAutosave();
+        }}
+        footnote={footnote}
+        onFootnoteChange={(val) => {
+          setFootnote(val);
+          triggerAutosave();
+        }}
+        afterword={afterword}
+        onAfterwordChange={(val) => {
+          setAfterword(val);
+          triggerAutosave();
+        }}
+        isVaulted={isVaulted}
+        onIsVaultedChange={(val) => {
+          setIsVaulted(val);
+          triggerAutosave();
+        }}
+        passphrase={passphrase}
+        onPassphraseChange={(val) => {
+          setPassphrase(val);
+          triggerAutosave();
+        }}
+        centralQuestion={centralQuestion}
+        onCentralQuestionChange={(val) => {
+          setCentralQuestion(val);
+          triggerAutosave();
+        }}
+        methodology={methodology}
+        onMethodologyChange={(val) => {
+          setMethodology(val);
+          triggerAutosave();
+        }}
+        limitations={limitations}
+        onLimitationsChange={(val) => {
+          setLimitations(val);
+          triggerAutosave();
+        }}
+        onOpenEditorialWorkspace={() => setIsWorkspaceDrawerOpen(true)}
+        observationDate={observationDate}
+        onObservationDateChange={(val) => {
+          setObservationDate(val);
+          triggerAutosave();
+        }}
+        datasetName={datasetName}
+        onDatasetNameChange={(val) => {
+          setDatasetName(val);
+          triggerAutosave();
+        }}
+        dataSource={dataSource}
+        onDataSourceChange={(val) => {
+          setDataSource(val);
+          triggerAutosave();
+        }}
+        dataUnits={dataUnits}
+        onDataUnitsChange={(val) => {
+          setDataUnits(val);
+          triggerAutosave();
+        }}
+        dataTimeframe={dataTimeframe}
+        onDataTimeframeChange={(val) => {
+          setDataTimeframe(val);
+          triggerAutosave();
+        }}
+      />
 
-        <h2 className="font-serif text-xl text-gray-400 uppercase tracking-widest mt-4">Cover Art</h2>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <input
-              type="text"
-              placeholder="e.g. A melancholic rainy city in watercolor"
-              className="w-full bg-transparent border-b border-gray-200 dark:border-gray-800 py-2 outline-none text-sm placeholder:text-gray-400"
-              value={coverImagePrompt}
-              onChange={e => setCoverImagePrompt(e.target.value)}
-            />
-            <button
-              onClick={handleGenerateCover}
-              disabled={isGeneratingImage || !coverImagePrompt.trim()}
-              className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
-            >
-              {isGeneratingImage ? "Generating..." : "Generate AI Cover"}
-            </button>
-          </div>
-          {coverImage && (
-            <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 mt-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverImage} alt="Cover Preview" className="w-full h-full object-cover" />
-              <button 
-                onClick={() => setCoverImage("")}
-                className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black/80 transition-colors"
-              >
-                &times;
-              </button>
-            </div>
-          )}
-        </div>
+      {/* Private Editorial Workspace Drawer (Investigations) */}
+      <EditorialWorkspaceDrawer
+        pieceId={activePieceId}
+        isOpen={isWorkspaceDrawerOpen}
+        onClose={() => setIsWorkspaceDrawerOpen(false)}
+        centralQuestion={centralQuestion}
+        onUpdateCentralQuestion={(q) => {
+          setCentralQuestion(q);
+          triggerAutosave();
+        }}
+        onEnsureDraftExists={async () => {
+          await assertPieceDraftExists(activePieceId, "investigation", user?.uid, userDisplayName);
+        }}
+      />
 
+      {/* High-Fidelity Reader Preview Modal */}
+      <PiecePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={() => setIsPreviewModalOpen(false)}
+        piece={pieceSnapshot}
+      />
 
-        <h2 className="font-serif text-xl text-gray-400 uppercase tracking-widest mt-4">Arsenal</h2>
-        
-        <div className="flex flex-col gap-4">
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className={`p-2 rounded-lg transition-colors ${isTypewriterMode ? 'bg-accent/10 text-accent' : 'bg-gray-50 dark:bg-gray-900 text-gray-400 group-hover:text-black dark:group-hover:text-white'}`}>
-              <Type size={18} />
-            </div>
-            <div className="flex flex-col">
-              <span className={`text-sm font-medium ${isTypewriterMode ? 'text-accent' : 'text-gray-500 group-hover:text-black dark:group-hover:text-white'}`}>Typewriter Mode</span>
-              <span className="text-xs text-gray-400">Disables backspace</span>
-            </div>
-            <input type="checkbox" className="hidden" checked={isTypewriterMode} onChange={(e) => setIsTypewriterMode(e.target.checked)} />
-          </label>
+      {/* Deliberate Publishing Confirmation Modal */}
+      <PublishConfirmationModal
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+        onConfirmPublish={handleConfirmPublish}
+        onUnpublish={async () => {
+          await handleUnpublishPiece(activePieceId);
+          setIsPublishModalOpen(false);
+        }}
+        onOpenSocialPreview={() => setIsSocialPreviewOpen(true)}
+        piece={pieceSnapshot}
+        isPublishing={saveStatus === "saving"}
+        isAlreadyPublished={status === "published"}
+      />
 
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className={`p-2 rounded-lg transition-colors ${isHaikuMode ? 'bg-accent/10 text-accent' : 'bg-gray-50 dark:bg-gray-900 text-gray-400 group-hover:text-black dark:group-hover:text-white'}`}>
-              <Fingerprint size={18} />
-            </div>
-            <div className="flex flex-col">
-              <span className={`text-sm font-medium ${isHaikuMode ? 'text-accent' : 'text-gray-500 group-hover:text-black dark:group-hover:text-white'}`}>Haiku Enforcer</span>
-              <span className="text-xs text-gray-400">Counts syllables</span>
-            </div>
-            <input type="checkbox" className="hidden" checked={isHaikuMode} onChange={(e) => setIsHaikuMode(e.target.checked)} />
-          </label>
+      {/* Accurate Social Metadata Preview Modal */}
+      <SocialPreviewModal
+        isOpen={isSocialPreviewOpen}
+        onClose={() => setIsSocialPreviewOpen(false)}
+        piece={pieceSnapshot}
+        coverImage={coverImage}
+      />
 
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className={`p-2 rounded-lg transition-colors ${isRhymeMode ? 'bg-accent/10 text-accent' : 'bg-gray-50 dark:bg-gray-900 text-gray-400 group-hover:text-black dark:group-hover:text-white'}`}>
-              <Activity size={18} />
-            </div>
-            <div className="flex flex-col">
-              <span className={`text-sm font-medium ${isRhymeMode ? 'text-accent' : 'text-gray-500 group-hover:text-black dark:group-hover:text-white'}`}>Rhyme Analyzer</span>
-              <span className="text-xs text-gray-400">Highlights schemes</span>
-            </div>
-            <input type="checkbox" className="hidden" checked={isRhymeMode} onChange={(e) => setIsRhymeMode(e.target.checked)} />
-          </label>
-
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className={`p-2 rounded-lg transition-colors ${isBlackoutMode ? 'bg-accent/10 text-accent' : 'bg-gray-50 dark:bg-gray-900 text-gray-400 group-hover:text-black dark:group-hover:text-white'}`}>
-              <Scissors size={18} />
-            </div>
-            <div className="flex flex-col">
-              <span className={`text-sm font-medium ${isBlackoutMode ? 'text-accent' : 'text-gray-500 group-hover:text-black dark:group-hover:text-white'}`}>Blackout Mode</span>
-              <span className="text-xs text-gray-400">Click words to redact</span>
-            </div>
-            <input type="checkbox" className="hidden" checked={isBlackoutMode} onChange={(e) => { setIsBlackoutMode(e.target.checked); setBlackoutIndices(new Set()); }} />
-          </label>
-
-          <button onClick={generateFoundPoetry} className="flex items-center gap-3 cursor-pointer group text-left">
-            <div className={`p-2 rounded-lg transition-colors bg-gray-50 dark:bg-gray-900 text-gray-400 group-hover:text-black dark:group-hover:text-white`}>
-              <FileSearch size={18} />
-            </div>
-            <div className="flex flex-col">
-              <span className={`text-sm font-medium text-gray-500 group-hover:text-black dark:group-hover:text-white`}>Found Poetry</span>
-              <span className="text-xs text-gray-400">Pull random text</span>
-            </div>
-          </button>
-        </div>
-
-        {/* Real-time Analysis */}
-        {(isHaikuMode || isRhymeMode) && content.trim() && (
-          <div className="mt-8">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Analysis</h3>
-            <div className="font-mono text-sm flex flex-col gap-2">
-              {lines.map((line, i) => {
-                const words = line.trim().split(/\s+/);
-                const lastWord = words[words.length - 1];
-                let rhymeColor = "";
-
-                if (isRhymeMode && lastWord) {
-                  const rGroup = getRhymeGroup(lastWord);
-                  if (rGroup.length >= 2) {
-                    if (!rhymeGroups.has(rGroup)) {
-                      rhymeGroups.set(rGroup, colors[colorIndex % colors.length]);
-                      colorIndex++;
-                    }
-                    rhymeColor = rhymeGroups.get(rGroup) || "";
-                  }
-                }
-
-                return (
-                  <div key={i} className="flex items-center justify-between">
-                    <span className="text-gray-500 truncate mr-4 text-xs opacity-50">{line || "..."}</span>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {isHaikuMode && (
-                        <span className={`w-6 text-right ${countLineSyllables(line) > 0 ? 'text-accent' : 'text-gray-600'}`}>
-                          {countLineSyllables(line)}
-                        </span>
-                      )}
-                      {isRhymeMode && (
-                        <span className={`w-8 text-right font-bold ${rhymeColor || 'text-gray-600'}`}>
-                          {lastWord ? lastWord.slice(-3) : "-"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Admin Credentials & Publisher Security Modal */}
+      {user && (
+        <AdminAccountModal
+          isOpen={isAdminAccountModalOpen}
+          onClose={() => setIsAdminAccountModalOpen(false)}
+          user={user}
+        />
+      )}
     </div>
-    </>
+  );
+}
+
+export default function WriteStudio() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center font-serif text-neutral-400">
+          Loading Writing Desk...
+        </div>
+      }
+    >
+      <WritingDeskContent />
+    </Suspense>
   );
 }

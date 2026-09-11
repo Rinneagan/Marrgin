@@ -56,7 +56,7 @@ export default function CollectionsPage() {
       <div className="py-24 px-8 max-w-[800px] mx-auto flex flex-col items-center justify-center text-center">
         <Library size={64} className="text-gray-300 dark:text-gray-700 mb-6" />
         <h1 className="font-serif text-4xl mb-4">Your Anthologies</h1>
-        <p className="text-secondary text-lg mb-8 max-w-md">Sign in to curate your personal collections of verses and share them with the world.</p>
+        <p className="text-secondary text-lg mb-8 max-w-md">Sign in to curate your personal collections of writing and reporting, and share them with the world.</p>
         <Link href="/login" className="bg-accent text-white px-8 py-3 rounded-full hover:bg-accent/90 transition-colors shadow-sm text-lg">
           Sign In
         </Link>
@@ -69,7 +69,7 @@ export default function CollectionsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
         <div>
           <h1 className="font-serif text-4xl md:text-5xl mb-4">Anthologies</h1>
-          <p className="text-secondary text-lg">Curate and share your favorite poetry collections.</p>
+          <p className="text-secondary text-lg">Curate and share collections across poetry, essays, investigations, and field notes.</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
@@ -88,7 +88,7 @@ export default function CollectionsPage() {
         <div className="py-24 px-8 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col items-center justify-center text-center bg-white/5 dark:bg-black/5">
           <BookOpen size={48} className="text-gray-300 dark:text-gray-700 mb-6" />
           <h2 className="font-serif text-2xl mb-2">No Anthologies Yet</h2>
-          <p className="text-secondary max-w-sm mb-6">Create your first anthology to start organizing your favorite poems.</p>
+          <p className="text-secondary max-w-sm mb-6">Create your first anthology to organize pieces across poetry, reporting, and essays.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -106,7 +106,7 @@ export default function CollectionsPage() {
                   <img src={collection.coverImage} alt={collection.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-6">
                     <h3 className="text-white font-serif text-2xl mb-1">{collection.title}</h3>
-                    <p className="text-gray-300 text-sm">{collection.poemIds.length} Poems</p>
+                    <p className="text-gray-300 text-sm">{collection.poemIds.length} {collection.poemIds.length === 1 ? "Piece" : "Pieces"}</p>
                   </div>
                   {!collection.isPublic && (
                     <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md p-2 rounded-full">

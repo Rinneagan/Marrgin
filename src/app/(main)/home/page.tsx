@@ -1,103 +1,175 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import FollowButton from "@/components/FollowButton";
-import BookmarkButton from "@/components/BookmarkButton";
-import LikeButton from "@/components/LikeButton";
-import { getLatestPoems, getFollowingPoems, Poem } from "@/lib/db";
+import { getPiecesFeed, Piece, EditorialGroup } from "@/lib/db";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
+import PieceCard from "@/components/PieceCard";
 
 const container: any = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.2 }
+    transition: { staggerChildren: 0.12 }
   }
 };
 
 const item: any = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 50, damping: 20 } }
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 60, damping: 20 } }
 };
 
 export default function HomeFeed() {
   const { user } = useAuth();
-  const [poems, setPoems] = useState<Poem[]>([]);
+  const [pieces, setPieces] = useState<Piece[]>([]);
   const [loading, setLoading] = useState(true);
   const [feedType, setFeedType] = useState<"global" | "following">("global");
+  const [activeGroup, setActiveGroup] = useState<EditorialGroup | "all">("all");
 
   const adminEmails = process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(",").map(e => e.trim().toLowerCase()) || [];
   const isAdmin = user?.email && adminEmails.includes(user.email.toLowerCase());
 
   useEffect(() => {
-    const fetchPoems = async () => {
+    const fetchFeed = async () => {
       setLoading(true);
       try {
-        if (feedType === "following" && user) {
-          const followingPoems = await getFollowingPoems(user.uid, 20);
-          setPoems(followingPoems);
-        } else {
-          const latestPoems = await getLatestPoems(20);
-          setPoems(latestPoems);
-        }
+        const feedPieces = await getPiecesFeed({
+          group: activeGroup,
+          feedType,
+          followerId: user?.uid,
+          limitCount: 30
+        });
+        setPieces(feedPieces);
       } catch (error) {
-        console.error("Failed to fetch poems:", error);
+        console.error("Failed to fetch pieces:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchPoems();
-  }, [feedType, user]);
+    fetchFeed();
+  }, [activeGroup, feedType, user]);
+
+  const filterTabs: { id: EditorialGroup | "all"; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "writing", label: "Writing" },
+    { id: "investigations", label: "Investigations" },
+    { id: "field-notes", label: "Field Notes" },
+    { id: "data", label: "Data Stories" },
+  ];
 
   return (
-    <div className="py-12 px-8 max-w-[1000px] mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
-        <h1 className="font-serif text-4xl">Your Feed</h1>
+    <div className="py-10 px-4 sm:px-8 max-w-[900px] mx-auto min-h-screen">
+      {/* Header & Feed Scope Toggle */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-baseline mb-6 gap-4 border-b border-gray-200/70 dark:border-gray-800/70 pb-4">
+        <div>
+          <h1 className="font-serif text-3xl sm:text-4xl text-neutral-900 dark:text-neutral-100">
+            Your Feed
+          </h1>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 font-serif italic">
+            Reading, reporting, and observation.
+          </p>
+        </div>
+
+        {/* Explore · Following Switcher (Subtle dot indicator) */}
         {user && (
-          <div className="flex items-center bg-gray-100 dark:bg-gray-900 rounded-full p-1 border border-gray-200 dark:border-gray-800">
+          <div className="flex items-center gap-2 text-xs font-sans">
             <button 
               onClick={() => setFeedType("global")}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+              className={`transition-colors relative py-1 ${
                 feedType === "global" 
-                  ? "bg-white dark:bg-black text-black dark:text-white shadow-sm" 
-                  : "text-gray-500 hover:text-black dark:hover:text-white"
+                  ? "text-neutral-900 dark:text-neutral-100 font-semibold" 
+                  : "text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
               }`}
             >
               Explore
+              {feedType === "global" && (
+                <motion.div 
+                  layoutId="feedTypeDot" 
+                  className="absolute -bottom-1 left-0 right-0 h-0.5 bg-amber-800 dark:bg-amber-400 rounded-full" 
+                />
+              )}
             </button>
+            <span className="text-neutral-300 dark:text-neutral-700">·</span>
             <button 
               onClick={() => setFeedType("following")}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+              className={`transition-colors relative py-1 ${
                 feedType === "following" 
-                  ? "bg-white dark:bg-black text-black dark:text-white shadow-sm" 
-                  : "text-gray-500 hover:text-black dark:hover:text-white"
+                  ? "text-neutral-900 dark:text-neutral-100 font-semibold" 
+                  : "text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
               }`}
             >
               Following
+              {feedType === "following" && (
+                <motion.div 
+                  layoutId="feedTypeDot" 
+                  className="absolute -bottom-1 left-0 right-0 h-0.5 bg-amber-800 dark:bg-amber-400 rounded-full" 
+                />
+              )}
             </button>
           </div>
         )}
       </div>
+
+      {/* Understated Mode Filter Bar (Small typography, hairline indicator) */}
+      <nav className="flex items-center gap-6 sm:gap-8 overflow-x-auto pb-3 mb-8 text-xs sm:text-sm font-sans no-scrollbar">
+        {filterTabs.map(tab => {
+          const isActive = activeGroup === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveGroup(tab.id)}
+              className={`relative py-1.5 whitespace-nowrap transition-colors tracking-wide ${
+                isActive 
+                  ? "text-neutral-900 dark:text-neutral-100 font-medium" 
+                  : "text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
+            >
+              <span>{tab.label}</span>
+              {isActive && (
+                <motion.div
+                  layoutId="activeFilterUnderline"
+                  className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-neutral-900 dark:bg-neutral-100"
+                  transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </nav>
       
+      {/* Content Feed */}
       {loading ? (
-        <div className="flex justify-center items-center h-40">
-          <div className="w-8 h-8 border-4 border-gray-200 dark:border-gray-800 border-t-black dark:border-t-white rounded-full animate-spin"></div>
+        <div className="flex flex-col justify-center items-center h-48 gap-3">
+          <div className="w-5 h-5 border-2 border-neutral-300 dark:border-neutral-700 border-t-neutral-900 dark:border-t-neutral-100 rounded-full animate-spin"></div>
+          <span className="text-xs text-neutral-400 tracking-wider font-mono uppercase">Retrieving Feed</span>
         </div>
-      ) : poems.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 gap-4 bg-white/50 dark:bg-black/50 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
-          <p className="text-secondary text-lg">
-            {feedType === "following" ? "You aren't following anyone with published poems yet." : "No poems published yet."}
+      ) : pieces.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl bg-neutral-50/40 dark:bg-neutral-950/20">
+          <p className="font-serif text-lg text-neutral-600 dark:text-neutral-400 mb-2">
+            {feedType === "following" 
+              ? "You aren't following anyone who has published in this section yet." 
+              : `No ${activeGroup === "all" ? "pieces" : activeGroup} published yet.`}
+          </p>
+          <p className="text-xs text-neutral-400 max-w-sm mb-6">
+            {feedType === "following" 
+              ? "Switch to the global feed to discover new reporting and writing." 
+              : "Check back as new field notes, investigations, and essays are published."}
           </p>
           {feedType === "following" && (
-            <button onClick={() => setFeedType("global")} className="text-black dark:text-white font-medium hover:underline">
+            <button 
+              onClick={() => setFeedType("global")} 
+              className="text-xs font-mono uppercase tracking-widest text-amber-900 dark:text-amber-400 hover:underline"
+            >
               Explore Global Feed
             </button>
           )}
           {isAdmin && feedType === "global" && (
-            <Link href="/write" className="bg-black text-white dark:bg-white dark:text-black px-6 py-2 rounded-full hover:opacity-90">
-              Be the first to write
+            <Link 
+              href="/write" 
+              className="mt-2 text-xs font-medium bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 px-5 py-2 rounded-full hover:opacity-90 transition-opacity"
+            >
+              Publish a new piece
             </Link>
           )}
         </div>
@@ -106,72 +178,40 @@ export default function HomeFeed() {
           variants={container}
           initial="hidden"
           animate="show"
-          className="space-y-8 flex flex-col items-center"
+          className="space-y-6"
         >
-          {poems.map((poem) => (
-            <motion.div
-              variants={item}
-              key={poem.id}
-              className="w-full bg-white/60 dark:bg-black/60 backdrop-blur-xl border border-gray-200 dark:border-gray-800 rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all overflow-hidden relative"
-            >
-              {poem.coverImage && (
-                <div className="absolute top-0 left-0 w-full h-48 sm:h-64 opacity-80 hover:opacity-100 transition-opacity z-0">
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#fdfbf7] dark:to-[#0a0a0a] z-10"></div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={poem.coverImage} alt="Cover" className="w-full h-full object-cover" />
-                </div>
-              )}
-              <div className="relative z-10 pt-16 sm:pt-24">
-              <Link href={`/read/${poem.id}`}>
-                <h2 className="font-serif text-3xl mb-3 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">{poem.title || "Untitled"}</h2>
-              </Link>
-              <div className="flex items-center gap-4 mb-6">
-                <Link href={`/user/${poem.authorId}`} className="text-secondary font-medium hover:text-black dark:hover:text-white transition-colors">
-                  by {poem.authorName}
-                </Link>
-                {user?.uid !== poem.authorId && (
-                  <FollowButton authorId={poem.authorId} />
-                )}
-              </div>
-              
-              <p className="font-poem text-xl text-gray-700 dark:text-gray-300 mb-8 leading-relaxed line-clamp-3">
-                {poem.content.replace(/<[^>]+>/g, '')}
-              </p>
-              
-              <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 pt-6">
-                <div className="flex gap-2">
-                  <span className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs px-4 py-1.5 rounded-full uppercase tracking-widest font-medium">
-                    {poem.aesthetic || "Poetry"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-6">
-                  <span className="text-sm text-secondary uppercase tracking-widest">
-                    {Math.max(1, Math.ceil(poem.content.length / 500))} min read
-                  </span>
-                  <div className="flex items-center gap-4">
-                    <LikeButton poemId={poem.id} initialLikesCount={poem.likesCount} />
-                    <BookmarkButton poemId={poem.id} />
-                  </div>
-                </div>
-                </div>
-              </div>
+          {pieces.map((piece) => (
+            <motion.div variants={item} key={piece.id}>
+              <PieceCard piece={piece} />
             </motion.div>
           ))}
         </motion.div>
       )}
 
-      {/* Mobile-only Extras (from Right Sidebar) */}
-      <div className="md:hidden mt-16 space-y-8">
-        <div className="bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-sm">
-          <h3 className="font-serif text-xl mb-4">Trending Tags</h3>
-          <div className="flex flex-wrap gap-2">
-            {["Nature", "Love", "Melancholy", "Hope", "City", "Dreams"].map((tag) => (
-              <button
+      {/* Mobile-only Extras */}
+      <div className="md:hidden mt-14 pt-8 border-t border-gray-200/70 dark:border-gray-800/70 space-y-6">
+        <div>
+          <h3 className="text-xs font-mono tracking-widest uppercase text-neutral-400 mb-3">
+            Topics & Desks
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              "Accra", 
+              "Odaw Basin", 
+              "Flooding", 
+              "Water Security", 
+              "Jamestown", 
+              "Mining", 
+              "Memory", 
+              "Urban Form"
+            ].map((tag) => (
+              <Link
                 key={tag}
-                className="text-sm bg-white/60 dark:bg-gray-800/60 border border-transparent hover:border-accent/50 px-3 py-1.5 rounded-full hover:text-accent transition-colors"
+                href={`/explore?tag=${encodeURIComponent(tag)}`}
+                className="text-xs bg-neutral-100 dark:bg-neutral-900 border border-transparent hover:border-amber-500/30 px-3 py-1 rounded-full text-neutral-700 dark:text-neutral-300 hover:text-amber-900 dark:hover:text-amber-400 transition-colors"
               >
                 {tag}
-              </button>
+              </Link>
             ))}
           </div>
         </div>
