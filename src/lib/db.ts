@@ -250,6 +250,7 @@ export interface Piece extends Poem {
   dataTimeframe?: string;
   dataUnits?: string;
   dataConfig?: string;
+  fontSize?: "small" | "medium" | "large";
   locationCoordinates?: { lat: number; lng: number };
   dateObserved?: string;
   observation?: string;
@@ -359,7 +360,8 @@ export const normalizePiece = (raw: any, id: string): Piece => {
     inference: raw.inference || "",
     narrativeContext: raw.narrativeContext || "",
     summary: raw.summary || "",
-    chapter: raw.chapter || ""
+    chapter: raw.chapter || "",
+    fontSize: raw.fontSize || "medium"
   };
 };
 
@@ -996,7 +998,23 @@ export const savePiece = async (pieceId: string, pieceData: Partial<Piece>): Pro
     }
   }
 
+  const isNewlyPublished = pieceData.status === "published" && (!snap.exists() || snap.data()?.status !== "published");
+
   await setDoc(pieceRef, dataToSave, { merge: true });
+
+  if (isNewlyPublished && !dataToSave.isVaulted) {
+    const modeLabel = cleanPieceData.mode || (snap.exists() ? snap.data()?.mode : undefined) || "piece";
+    const titleLabel = cleanPieceData.title || (snap.exists() ? snap.data()?.title : undefined) || "Untitled";
+    try {
+      await createSiteNotification(
+        "poem",
+        `New ${modeLabel} published: ${titleLabel}`,
+        `/read/${pieceId}`
+      );
+    } catch (notifErr) {
+      console.error("Failed to create publication notification:", notifErr);
+    }
+  }
 };
 
 export interface WritingDeskData {

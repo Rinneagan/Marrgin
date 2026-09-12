@@ -32,6 +32,8 @@ interface WritingDeskDashboardProps {
   onPreviewPiece: (piece: Piece) => void;
   onOpenAdminAccount?: () => void;
   userDisplayName: string;
+  currentUserId?: string;
+  isAdmin?: boolean;
 }
 
 const MODES: { id: EditorialMode; label: string; description: string; icon: any }[] = [
@@ -103,13 +105,15 @@ export default function WritingDeskDashboard({
   onPreviewPiece,
   onOpenAdminAccount,
   userDisplayName,
+  currentUserId,
+  isAdmin = false,
 }: WritingDeskDashboardProps) {
   const [isModeSelectorOpen, setIsModeSelectorOpen] = useState(false);
 
   const handleStartPiece = async (selectedMode: EditorialMode) => {
     setIsModeSelectorOpen(false);
     const freshId = generatePieceId();
-    await assertPieceDraftExists(freshId, selectedMode, "anonymous", userDisplayName);
+    await assertPieceDraftExists(freshId, selectedMode, currentUserId || "anonymous", userDisplayName);
     onOpenPiece(freshId);
   };
 
@@ -170,69 +174,76 @@ export default function WritingDeskDashboard({
               </div>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-900">
-                {drafts.map((draft) => (
-                  <div
-                    key={draft.id}
-                    onClick={() => onOpenPiece(draft.id)}
-                    className="group py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/60 dark:hover:bg-neutral-900/30 px-3 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-serif text-lg text-neutral-900 dark:text-neutral-100 group-hover:text-amber-900 dark:group-hover:text-amber-400 transition-colors truncate">
-                          {draft.title.trim() || "Untitled Draft"}
-                        </span>
-                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0">
-                          {draft.mode || "poetry"}
-                        </span>
+                {drafts.map((draft) => {
+                  const canManage = Boolean(isAdmin || (currentUserId && draft.authorId === currentUserId));
+                  return (
+                    <div
+                      key={draft.id}
+                      onClick={() => onOpenPiece(draft.id)}
+                      className="group py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/60 dark:hover:bg-neutral-900/30 px-3 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-serif text-lg text-neutral-900 dark:text-neutral-100 group-hover:text-amber-900 dark:group-hover:text-amber-400 transition-colors truncate">
+                            {draft.title.trim() || "Untitled Draft"}
+                          </span>
+                          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0">
+                            {draft.mode || "poetry"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400 font-sans">
+                          <Clock size={11} />
+                          <span>{formatRelativeTime(draft.updatedAt || draft.createdAt)}</span>
+                          {draft.location && (
+                            <>
+                              <span>·</span>
+                              <span>{draft.location}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400 font-sans">
-                        <Clock size={11} />
-                        <span>{formatRelativeTime(draft.updatedAt || draft.createdAt)}</span>
-                        {draft.location && (
-                          <>
-                            <span>·</span>
-                            <span>{draft.location}</span>
-                          </>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {canManage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenPiece(draft.id);
+                            }}
+                            className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5"
+                            title="Edit draft in Studio"
+                          >
+                            <Pencil size={11} />
+                            <span>Edit</span>
+                            <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPreviewPiece(draft);
+                          }}
+                          className="p-1.5 text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors rounded-full border border-gray-200 dark:border-gray-800"
+                          title="Preview draft"
+                        >
+                          <Eye size={13} />
+                        </button>
+                        {canManage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteDraft(draft.id);
+                            }}
+                            className="p-1.5 text-neutral-400 hover:text-rose-500 transition-colors rounded-full border border-gray-200 dark:border-gray-800"
+                            title="Delete draft"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenPiece(draft.id);
-                        }}
-                        className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5"
-                        title="Edit draft in Studio"
-                      >
-                        <Pencil size={11} />
-                        <span>Edit</span>
-                        <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPreviewPiece(draft);
-                        }}
-                        className="p-1.5 text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors rounded-full border border-gray-200 dark:border-gray-800"
-                        title="Preview draft"
-                      >
-                        <Eye size={13} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteDraft(draft.id);
-                        }}
-                        className="p-1.5 text-neutral-400 hover:text-rose-500 transition-colors rounded-full border border-gray-200 dark:border-gray-800"
-                        title="Delete draft"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
@@ -248,69 +259,76 @@ export default function WritingDeskDashboard({
               </div>
 
               <div className="divide-y divide-gray-100 dark:divide-gray-900">
-                {scheduled.map((piece) => (
-                  <div
-                    key={piece.id}
-                    onClick={() => onOpenPiece(piece.id)}
-                    className="group py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/60 dark:hover:bg-neutral-900/30 px-3 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-serif text-lg text-neutral-900 dark:text-neutral-100 group-hover:text-emerald-900 dark:group-hover:text-emerald-400 transition-colors truncate">
-                          {piece.title.trim() || "Untitled Piece"}
-                        </span>
-                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                          {piece.mode || "poetry"}
-                        </span>
+                {scheduled.map((piece) => {
+                  const canManage = Boolean(isAdmin || (currentUserId && piece.authorId === currentUserId));
+                  return (
+                    <div
+                      key={piece.id}
+                      onClick={() => onOpenPiece(piece.id)}
+                      className="group py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/60 dark:hover:bg-neutral-900/30 px-3 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-serif text-lg text-neutral-900 dark:text-neutral-100 group-hover:text-emerald-900 dark:group-hover:text-emerald-400 transition-colors truncate">
+                            {piece.title.trim() || "Untitled Piece"}
+                          </span>
+                          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                            {piece.mode || "poetry"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400 font-sans">
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                            Scheduled for {piece.scheduledAt ? new Date(piece.scheduledAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "Upcoming"}
+                          </span>
+                          {piece.location && (
+                            <>
+                              <span>·</span>
+                              <span>{piece.location}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400 font-sans">
-                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                          Scheduled for {piece.scheduledAt ? new Date(piece.scheduledAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : "Upcoming"}
-                        </span>
-                        {piece.location && (
-                          <>
-                            <span>·</span>
-                            <span>{piece.location}</span>
-                          </>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {canManage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenPiece(piece.id);
+                            }}
+                            className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                            title="Edit scheduled piece in Studio"
+                          >
+                            <Pencil size={11} />
+                            <span>Edit</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPreviewPiece(piece);
+                          }}
+                          className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 rounded border border-gray-200 dark:border-gray-800"
+                          title="View reader layout"
+                        >
+                          Preview
+                        </button>
+                        {canManage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUnpublishPiece(piece.id);
+                            }}
+                            className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-amber-600 rounded border border-gray-200 dark:border-gray-800"
+                            title="Cancel schedule and return to draft"
+                          >
+                            Revert to Draft
+                          </button>
                         )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenPiece(piece.id);
-                        }}
-                        className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5 shadow-xs"
-                        title="Edit scheduled piece in Studio"
-                      >
-                        <Pencil size={11} />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPreviewPiece(piece);
-                        }}
-                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 rounded border border-gray-200 dark:border-gray-800"
-                        title="View reader layout"
-                      >
-                        Preview
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onUnpublishPiece(piece.id);
-                        }}
-                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-amber-600 rounded border border-gray-200 dark:border-gray-800"
-                        title="Cancel schedule and return to draft"
-                      >
-                        Revert to Draft
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
@@ -329,88 +347,97 @@ export default function WritingDeskDashboard({
               </div>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-900">
-                {published.map((piece) => (
-                  <div
-                    key={piece.id}
-                    onClick={() => onOpenPiece(piece.id)}
-                    className="group py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/60 dark:hover:bg-neutral-900/30 px-3 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-serif text-lg text-neutral-900 dark:text-neutral-100 group-hover:text-amber-900 dark:group-hover:text-amber-400 transition-colors truncate">
-                          {piece.title}
-                        </span>
-                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                          {piece.mode || "poetry"}
-                        </span>
-                        {piece.isVaulted && (
-                          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 shrink-0">
-                            Vaulted
+                {published.map((piece) => {
+                  const canManage = Boolean(isAdmin || (currentUserId && piece.authorId === currentUserId));
+                  return (
+                    <div
+                      key={piece.id}
+                      onClick={() => onOpenPiece(piece.id)}
+                      className="group py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/60 dark:hover:bg-neutral-900/30 px-3 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-serif text-lg text-neutral-900 dark:text-neutral-100 group-hover:text-amber-900 dark:group-hover:text-amber-400 transition-colors truncate">
+                            {piece.title}
                           </span>
-                        )}
+                          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                            {piece.mode || "poetry"}
+                          </span>
+                          {piece.isVaulted && (
+                            <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 shrink-0">
+                              Vaulted
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400 font-sans">
+                          <span>{formatPublishedDate(piece.createdAt)}</span>
+                          {piece.readingTimeMinutes ? (
+                            <>
+                              <span>·</span>
+                              <span>{piece.readingTimeMinutes} min read</span>
+                            </>
+                          ) : null}
+                          {piece.location && (
+                            <>
+                              <span>·</span>
+                              <span>{piece.location}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400 font-sans">
-                        <span>{formatPublishedDate(piece.createdAt)}</span>
-                        {piece.readingTimeMinutes ? (
-                          <>
-                            <span>·</span>
-                            <span>{piece.readingTimeMinutes} min read</span>
-                          </>
-                        ) : null}
-                        {piece.location && (
-                          <>
-                            <span>·</span>
-                            <span>{piece.location}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenPiece(piece.id);
-                        }}
-                        className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5 shadow-xs"
-                        title="Edit published piece in Studio"
-                      >
-                        <Pencil size={11} />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPreviewPiece(piece);
-                        }}
-                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 rounded-full border border-gray-200 dark:border-gray-800 transition-colors"
-                        title="View reader layout"
-                      >
-                        Preview
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onUnpublishPiece(piece.id);
-                        }}
-                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-amber-600 rounded-full border border-gray-200 dark:border-gray-800 transition-colors"
-                        title="Unpublish back to draft"
-                      >
-                        Unpublish
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onArchivePiece(piece.id);
-                        }}
-                        className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-                        title="Archive piece"
-                      >
-                        <Archive size={14} />
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {canManage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenPiece(piece.id);
+                            }}
+                            className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                            title="Edit published piece in Studio"
+                          >
+                            <Pencil size={11} />
+                            <span>Edit</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPreviewPiece(piece);
+                          }}
+                          className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 rounded-full border border-gray-200 dark:border-gray-800 transition-colors"
+                          title="View reader layout"
+                        >
+                          Preview
+                        </button>
+                        {canManage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUnpublishPiece(piece.id);
+                            }}
+                            className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-amber-600 rounded-full border border-gray-200 dark:border-gray-800 transition-colors"
+                            title="Unpublish back to draft"
+                          >
+                            Unpublish
+                          </button>
+                        )}
+                        {canManage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onArchivePiece(piece.id);
+                            }}
+                            className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                            title="Archive piece"
+                          >
+                            <Archive size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
