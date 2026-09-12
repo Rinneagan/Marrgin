@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { HfInference } from "@huggingface/inference";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { getAdminIdToken, SINGLE_ADMIN_UID } from "@/lib/serverFirestoreRest";
 
 // Verify admin identity from Bearer token via Firebase Identity Toolkit
@@ -40,11 +41,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Validate Server Environment (Strict server-side GEMINI_API_KEY)
+    // 2. Validate Server Environment: Hugging Face (Free, No Billing) or Gemini
+    const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+    const hasValidHfToken = Boolean(hfToken && !hfToken.includes("your-huggingface-token") && hfToken.trim());
+
     const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey || geminiApiKey.trim() === "" || geminiApiKey.includes("your-gemini-api-key")) {
+    const hasValidGeminiKey = Boolean(geminiApiKey && !geminiApiKey.includes("your-gemini-api-key") && geminiApiKey.trim());
+
+    if (!hasValidHfToken && !hasValidGeminiKey) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY is not configured on the server. Please add your key to environment variables." },
+        { 
+          error: "No AI provider token configured. Please add your free Hugging Face token (HF_TOKEN) from https://huggingface.co/settings/tokens to .env.local (100% free, no credit card or billing required)." 
+        },
         { status: 500 }
       );
     }
@@ -81,68 +89,152 @@ export async function POST(req: NextRequest) {
     // Only introduce Ghanaian imagery if explicitly supported by prompt/metadata.
     const literaryPrompt = `A fine-art editorial photograph for a prestigious literary publication. Subject: ${visualSubject}.${contextualNotes} Style: rich analog medium-format film grain, quiet contemplative mood, natural lighting, restrained composition, authentic physical texture, generous negative space suitable for publication layout. Strictly NO text, NO typography, NO letters, NO words, NO logos, NO watermarks. Avoid generic CGI, digital 3D rendering, cheesy stock-photo aesthetics, or artificial decorative clutter.`;
 
-    // 4. Call Google Gemini Native Image Generation via ai.interactions.create
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-
-    const primaryModel = process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image";
-    const modelsToTry = [
-      primaryModel,
-      "gemini-2.5-flash-image",
-    ].filter((m, idx, arr): m is string => Boolean(m) && arr.indexOf(m) === idx);
-
-    let imageBase64: string | null = null;
+    let imageBuffer: Buffer | null = null;
     let lastError: any = null;
 
-    for (const modelName of modelsToTry) {
+    // 4A. Strategy 1: Hugging Face Inference API (Free, No Billing / No Credit Card Required)
+    if (hasValidHfToken && hfToken) {
       try {
-        const interaction = await ai.interactions.create({
-          model: modelName,
-          input: literaryPrompt,
-          response_format: {
-            type: "image",
-            aspect_ratio: "3:2",
-          },
-        });
+        const hf = new HfInference(hfToken.trim());
+        const hfModels = [
+          process.env.HF_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell",
+          "stabilityai/stable-diffusion-xl-base-1.0",
+        ];
 
-        // Check direct SDK output_image field
-        if (interaction.output_image?.data) {
-          imageBase64 = interaction.output_image.data;
-          break;
-        }
+        for (const model of hfModels) {
+          try {
+            const res: any = await hf.textToImage({
+              model,
+              inputs: literaryPrompt,
+            });
 
-        // Check steps / content blocks if output_image is nested
-        if ((interaction as any).steps) {
-          for (const step of (interaction as any).steps) {
-            if (step.type === "model_output" && Array.isArray(step.content)) {
-              for (const contentBlock of step.content) {
-                if (contentBlock.type === "image" && contentBlock.data) {
-                  imageBase64 = contentBlock.data;
-                  break;
-                }
-              }
+            if (res && typeof res.arrayBuffer === "function") {
+              const arrayBuffer = await res.arrayBuffer();
+              imageBuffer = Buffer.from(arrayBuffer);
+            } else if (typeof res === "string") {
+              const b64Data = res.includes(",") ? res.split(",")[1] : res;
+              imageBuffer = Buffer.from(b64Data, "base64");
             }
-            if (imageBase64) break;
+
+            if (imageBuffer) break;
+          } catch (modelErr: any) {
+            lastError = modelErr;
+            console.warn(`Hugging Face model ${model} generation attempt failed:`, modelErr?.message || modelErr);
           }
         }
-
-        if (imageBase64) break;
-      } catch (genErr: any) {
-        lastError = genErr;
-        console.error(`Gemini image generation with ${modelName} failed:`, genErr?.message || genErr);
+      } catch (hfErr: any) {
+        lastError = hfErr;
+        console.error("Hugging Face inference error:", hfErr?.message || hfErr);
       }
     }
 
-    if (!imageBase64) {
-      const rawMsg = lastError?.message || "No image data returned from Gemini API.";
-      // Sanitize any potential sensitive credentials in error messages
-      const sanitizedMsg = String(rawMsg).replace(/AIza[0-9A-Za-z-_]{35}/g, "[REDACTED]");
+    // 4B. Strategy 2: Google Gemini Native API (if HF token not configured or failed, and Gemini key present)
+    if (!imageBuffer && hasValidGeminiKey && geminiApiKey) {
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey.trim() });
+      const geminiModels = [
+        process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image",
+        "gemini-2.5-flash-image",
+      ].filter((m, idx, arr): m is string => Boolean(m) && arr.indexOf(m) === idx);
+
+      let imageBase64: string | null = null;
+
+      // Try interactions API
+      for (const modelName of geminiModels) {
+        try {
+          const interaction = await ai.interactions.create({
+            model: modelName,
+            input: literaryPrompt,
+            response_format: {
+              type: "image",
+              aspect_ratio: "3:2",
+            },
+          });
+
+          if (interaction.output_image?.data) {
+            imageBase64 = interaction.output_image.data;
+            break;
+          }
+
+          if ((interaction as any).steps) {
+            for (const step of (interaction as any).steps) {
+              if (step.type === "model_output" && Array.isArray(step.content)) {
+                for (const contentBlock of step.content) {
+                  if (contentBlock.type === "image" && contentBlock.data) {
+                    imageBase64 = contentBlock.data;
+                    break;
+                  }
+                }
+              }
+              if (imageBase64) break;
+            }
+          }
+
+          if (imageBase64) break;
+        } catch (genErr: any) {
+          lastError = genErr;
+        }
+      }
+
+      // Fallback to generateContent with image modality
+      if (!imageBase64) {
+        for (const modelName of geminiModels) {
+          try {
+            const genRes = await ai.models.generateContent({
+              model: modelName,
+              contents: literaryPrompt,
+              config: {
+                responseModalities: [Modality.IMAGE],
+              },
+            });
+
+            for (const part of genRes.candidates?.[0]?.content?.parts || []) {
+              if (part.inlineData?.data) {
+                imageBase64 = part.inlineData.data;
+                break;
+              }
+            }
+
+            if (imageBase64) break;
+          } catch (contentErr: any) {
+            lastError = contentErr;
+          }
+        }
+      }
+
+      if (imageBase64) {
+        imageBuffer = Buffer.from(imageBase64, "base64");
+      }
+    }
+
+    if (!imageBuffer) {
+      let detailedMsg = "";
+      if (lastError?.body) {
+        try {
+          const parsed = typeof lastError.body === "string" ? JSON.parse(lastError.body) : lastError.body;
+          const firstErr = Array.isArray(parsed) ? parsed[0]?.error : parsed?.error;
+          if (firstErr?.message) {
+            detailedMsg = firstErr.message;
+          }
+        } catch {}
+      }
+      if (!detailedMsg && lastError?.error?.message) {
+        detailedMsg = lastError.error.message;
+      }
+      let rawMsg = detailedMsg || lastError?.message || "No image data returned from AI provider.";
+
+      let userFriendlyMsg = rawMsg;
+      if (rawMsg.includes("You exceeded your current quota") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("free_tier_requests, limit: 0")) {
+        userFriendlyMsg = "Google Gemini quota exceeded: Google's image models require a billing-enabled project (free tier limit is 0). To generate completely free with no billing, add a free Hugging Face token (HF_TOKEN) from https://huggingface.co/settings/tokens to .env.local.";
+      } else if (rawMsg.includes("Authorization header") || rawMsg.includes("Unauthorized") || rawMsg.includes("401")) {
+        userFriendlyMsg = "Hugging Face authentication required: Please add a free personal access token (HF_TOKEN) from https://huggingface.co/settings/tokens to .env.local (free account, no credit card required).";
+      }
+
+      const sanitizedMsg = String(userFriendlyMsg).replace(/AIza[0-9A-Za-z-_]{35}|hf_[0-9A-Za-z]{34}/g, "[REDACTED]");
       return NextResponse.json(
-        { error: `Gemini image generation error: ${sanitizedMsg}` },
+        { error: sanitizedMsg },
         { status: 502 }
       );
     }
-
-    const imageBuffer = Buffer.from(imageBase64, "base64");
 
     // 5. Server uploads image to Firebase Storage at covers/{pieceId}/{timestamp}.png
     const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "friday-pages-web.firebasestorage.app";
