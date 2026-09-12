@@ -101,10 +101,10 @@ export default function ProseRenderer({
           <p
             key={idx}
             onClick={() => onParagraphClick?.(idx, trimmed)}
-            className={`font-serif text-lg md:text-[21px] leading-[2.1] tracking-normal mb-8 relative group cursor-pointer transition-colors duration-300 ${
+            className={`font-serif text-lg md:text-[21px] leading-[2.1] tracking-normal mb-8 relative transition-colors duration-300 ${
               isReadInDark
-                ? "text-gray-300 hover:text-white"
-                : "text-gray-800 dark:text-gray-200 hover:text-black dark:hover:text-white"
+                ? "text-gray-300"
+                : "text-gray-800 dark:text-gray-200"
             }`}
           >
             {hasEcho && (
@@ -113,7 +113,7 @@ export default function ProseRenderer({
                 title="This paragraph has echoes"
               />
             )}
-            <span className="group-hover:border-b group-hover:border-accent/30 transition-all">
+            <span>
               {trimmed}
             </span>
           </p>

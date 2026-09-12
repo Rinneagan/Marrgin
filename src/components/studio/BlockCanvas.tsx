@@ -449,6 +449,7 @@ export function BlockCanvas({ blocks, mode, onChange, readOnly = false }: BlockC
                 value={block.content}
                 placeholder={placeholder}
                 readOnly={readOnly}
+                spellCheck={false}
                 onFocus={() => setActiveBlockId(block.id)}
                 onBlur={() => {
                   // Delay closing to allow clicking menu options
