@@ -15,6 +15,14 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "Marrgin",
   description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
