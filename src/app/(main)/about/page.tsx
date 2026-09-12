@@ -1,4 +1,4 @@
-import { Feather, Wind, Shield } from "lucide-react";
+import { Feather, Wind, Shield, User, ArrowUpRight } from "lucide-react";
 
 export default function AboutPage() {
   return (
@@ -46,6 +46,26 @@ export default function AboutPage() {
             <p className="font-poem text-xl leading-loose text-gray-700 dark:text-gray-300">
               Your words are yours. Marrgin is built on a foundation of privacy and ownership. The Secret Vault allows you to lock away verses meant only for specific eyes, protected by your own passphrase. No scrapers, no noise. Just your thoughts, kept safe.
             </p>
+          </div>
+        </section>
+        <section className="flex flex-col md:flex-row gap-12 items-start">
+          <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0 mt-2">
+            <User className="text-accent" size={28} />
+          </div>
+          <div>
+            <h2 className="font-serif text-4xl mb-6">Founder & Editor</h2>
+            <p className="font-poem text-xl leading-loose text-gray-700 dark:text-gray-300 mb-6">
+              Marrgin is created and edited by Ebenezer Essel—a home for observing, questioning, and documenting the world through Ghanaian environmental reporting, evidence, personal essays, and poetry.
+            </p>
+            <a 
+              href="https://ebenezeressel.netlify.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 border border-amber-600/30 bg-amber-500/5 hover:bg-amber-500/10 px-4 py-2.5 rounded-full transition-all group"
+            >
+              <span>Explore Personal Portfolio & Work — ebenezeressel.netlify.app</span>
+              <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </a>
           </div>
         </section>
       </div>

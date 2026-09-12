@@ -18,7 +18,8 @@ import {
   Search, 
   Eye, 
   BarChart3, 
-  Info 
+  Info,
+  CloudRain
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { auth } from "@/lib/firebase";
@@ -63,6 +64,7 @@ function MobileNavbarContent() {
       items: [
         { name: "Writing", href: "/explore?mode=writing", icon: Feather, modeKey: "writing" },
         { name: "Investigations", href: "/explore?mode=investigation", icon: Search, modeKey: "investigation" },
+        { name: "Beyond the Rain", href: "/beyond-the-rain", icon: CloudRain, exact: true },
         { name: "Field Notes", href: "/explore?mode=field-note", icon: Eye, modeKey: "field-note" },
         { name: "Data Stories", href: "/explore?mode=data-story", icon: BarChart3, modeKey: "data-story" },
       ]

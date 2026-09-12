@@ -94,6 +94,7 @@ function WritingDeskContent() {
   const [coverImage, setCoverImage] = useState("");
   const [coverImagePrompt, setCoverImagePrompt] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
+  const [chapter, setChapter] = useState("");
 
   // Zen Mode (Distraction-free)
   const [isZenMode, setIsZenMode] = useState(false);
@@ -210,6 +211,7 @@ function WritingDeskContent() {
       setDataSource(piece.dataSource || "");
       setDataUnits(piece.dataUnits || "");
       setDataTimeframe(piece.dataTimeframe || "");
+      setChapter(piece.chapter || "");
       setSaveStatus("saved");
       hasPendingChangesRef.current = false;
     });
@@ -249,6 +251,7 @@ function WritingDeskContent() {
       dataSource,
       dataUnits,
       dataTimeframe,
+      chapter: chapter || undefined,
       authorId: user?.uid || "anonymous",
       authorName: userDisplayName,
       ...(isFeatured ? { isFeatured: true } : { isFeatured: false }),
@@ -257,7 +260,7 @@ function WritingDeskContent() {
     activePieceId, title, subtitle, content, mode, status, scheduledAt, publishedAt,
     location, tagsInput, coverImage, coverImagePrompt, isVaulted, passphrase, epigraph, dedication,
     footnote, afterword, centralQuestion, methodology, limitations, observationDate,
-    datasetName, dataSource, dataUnits, dataTimeframe, user, userDisplayName, isFeatured
+    datasetName, dataSource, dataUnits, dataTimeframe, user, userDisplayName, isFeatured, chapter
   ]);
 
   // Core Persistent Save Implementation
@@ -786,6 +789,11 @@ function WritingDeskContent() {
         isFeatured={isFeatured}
         onIsFeaturedChange={(val) => {
           setIsFeatured(val);
+          triggerAutosave();
+        }}
+        chapter={chapter}
+        onChapterChange={(val) => {
+          setChapter(val);
           triggerAutosave();
         }}
         epigraph={epigraph}

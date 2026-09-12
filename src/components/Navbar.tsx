@@ -21,6 +21,9 @@ export default function Navbar() {
           <Link href="/explore?mode=investigation" className="hover:text-neutral-900 dark:hover:text-white transition-colors">
             Investigations
           </Link>
+          <Link href="/beyond-the-rain" className="hover:text-neutral-900 dark:hover:text-white transition-colors">
+            Beyond the Rain
+          </Link>
           <Link href="/explore?mode=field-note" className="hover:text-neutral-900 dark:hover:text-white transition-colors">
             Field Notes
           </Link>

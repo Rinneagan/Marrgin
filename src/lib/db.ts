@@ -257,6 +257,7 @@ export interface Piece extends Poem {
   inference?: string;
   narrativeContext?: string;
   summary?: string;
+  chapter?: string; // e.g. "beyond-the-rain"
 }
 
 export interface EditorialWorkspace {
@@ -357,7 +358,8 @@ export const normalizePiece = (raw: any, id: string): Piece => {
     finding: raw.finding || "",
     inference: raw.inference || "",
     narrativeContext: raw.narrativeContext || "",
-    summary: raw.summary || ""
+    summary: raw.summary || "",
+    chapter: raw.chapter || ""
   };
 };
 
@@ -472,6 +474,21 @@ export const getPiecesFeed = async (options: FeedOptions = {}): Promise<Piece[]>
   }
 
   return pieces.slice(0, limitCount);
+};
+
+export const getBeyondTheRainPieces = async (): Promise<Piece[]> => {
+  const allPieces = await getPiecesFeed({ limitCount: 100 });
+  const chapterPieces = allPieces.filter(p => 
+    p.chapter === "beyond-the-rain" && 
+    !p.isVaulted && 
+    (p.status === "published" || !p.status)
+  );
+
+  return chapterPieces.sort((a, b) => {
+    const timeA = a.publishedAt ? (a.publishedAt.toMillis ? a.publishedAt.toMillis() : new Date(a.publishedAt).getTime()) : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const timeB = b.publishedAt ? (b.publishedAt.toMillis ? b.publishedAt.toMillis() : new Date(b.publishedAt).getTime()) : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    return timeB - timeA;
+  });
 };
 
 export function searchPieces(queryStr: string, pieces: Piece[]): Piece[] {

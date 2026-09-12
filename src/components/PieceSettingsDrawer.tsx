@@ -17,7 +17,8 @@ import {
   Star, 
   Image as ImageIcon,
   Wand2,
-  Loader2
+  Loader2,
+  CloudRain
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -39,6 +40,8 @@ interface PieceSettingsDrawerProps {
   contentSnippet?: string;
   isFeatured: boolean;
   onIsFeaturedChange: (val: boolean) => void;
+  chapter?: string;
+  onChapterChange?: (val: string) => void;
   
   // Poetry / Essay
   epigraph: string;
@@ -130,6 +133,8 @@ export default function PieceSettingsDrawer({
   onDataTimeframeChange,
   coverImagePrompt = "",
   onCoverImagePromptChange,
+  chapter = "",
+  onChapterChange,
   pieceId,
   pieceTitle,
   contentSnippet,
@@ -289,6 +294,21 @@ export default function PieceSettingsDrawer({
                   className="w-full bg-neutral-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-neutral-800 dark:text-neutral-200 outline-none focus:border-amber-500"
                 />
                 <p className="text-[11px] text-neutral-400">Separate with commas.</p>
+              </div>
+
+              {/* Chapter Association */}
+              <div className="space-y-1.5">
+                <label className="font-mono uppercase tracking-widest text-neutral-400 flex items-center gap-1.5">
+                  <BookOpen size={12} /> Beyond the Rain Chapter
+                </label>
+                <select
+                  value={chapter || ""}
+                  onChange={(e) => onChapterChange?.(e.target.value)}
+                  className="w-full bg-neutral-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-neutral-800 dark:text-neutral-200 text-sm outline-none focus:border-amber-500"
+                >
+                  <option value="">None</option>
+                  <option value="beyond-the-rain">Beyond the Rain in Ghana</option>
+                </select>
               </div>
 
               {/* 4. Cover Image */}
