@@ -280,6 +280,17 @@ export default function WritingDeskDashboard({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          onOpenPiece(piece.id);
+                        }}
+                        className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                        title="Edit scheduled piece in Studio"
+                      >
+                        <Pencil size={11} />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           onPreviewPiece(piece);
                         }}
                         className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 rounded border border-gray-200 dark:border-gray-800"

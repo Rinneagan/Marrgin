@@ -851,6 +851,7 @@ function WritingDeskContent() {
         }}
         pieceId={activePieceId || undefined}
         pieceTitle={title}
+        contentSnippet={content ? content.slice(0, 300) : undefined}
       />
 
       {/* Private Editorial Workspace Drawer (Investigations) */}

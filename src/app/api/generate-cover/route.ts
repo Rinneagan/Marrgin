@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 import { getAdminIdToken, SINGLE_ADMIN_UID } from "@/lib/serverFirestoreRest";
-import fs from "fs";
-import path from "path";
 
-// Verify admin identity from Bearer token
+// Verify admin identity from Bearer token via Firebase Identity Toolkit
 async function verifyAdminFromHeader(req: NextRequest): Promise<boolean> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -41,71 +40,114 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Validate API Key
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
+    // 2. Validate Server Environment (Strict server-side GEMINI_API_KEY)
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey || geminiApiKey.trim() === "" || geminiApiKey.includes("your-gemini-api-key")) {
       return NextResponse.json(
-        { error: "OPENAI_API_KEY is not configured on the server. Please add it to your environment variables." },
+        { error: "GEMINI_API_KEY is not configured on the server. Please add your key to environment variables." },
         { status: 500 }
       );
     }
 
-    // 3. Parse and construct literary prompt
+    // 3. Parse Request & Prioritized Prompt Construction
     const body = await req.json().catch(() => ({}));
-    const { pieceId, prompt, title, mode } = body;
+    const { pieceId, prompt, title, mode, contentSnippet } = body;
 
-    let literaryPrompt = "";
-    if (prompt && prompt.trim()) {
-      literaryPrompt = `An atmospheric, high-end editorial photograph for a prestigious literary publication. Subject: ${prompt.trim()}. Style: rich analog film grain, subtle natural chiaroscuro lighting, contemplative and melancholic mood, authentic Ghanaian texture and environmental reality. Thoughtful negative space suitable for an editorial magazine header. Strictly NO text, NO typography, NO letters, NO words, NO logos, NO watermarks.`;
+    // Hierarchy: 1. Explicit prompt > 2. Title > 3. Editorial mode > 4. Short content context
+    let visualSubject = "";
+    if (prompt && typeof prompt === "string" && prompt.trim()) {
+      visualSubject = prompt.trim();
+    } else if (title && typeof title === "string" && title.trim()) {
+      visualSubject = `Visual metaphor evoking the piece titled "${title.trim()}"`;
     } else {
-      const modeLabel = mode || "essay";
-      const titleLabel = title ? `titled "${title.trim()}"` : "untitled";
-      literaryPrompt = `A metaphorical and evocative fine-art editorial photograph for a literary ${modeLabel} ${titleLabel}. Poetic framing, natural earth tones, analog medium-format film grain, quiet emotional resonance, authentic Ghanaian atmosphere. Strictly NO text, NO typography, NO letters, NO words, NO logos, NO watermarks.`;
+      visualSubject = `Atmospheric editorial visual metaphor for a literary ${mode || "piece"}`;
     }
 
-    // 4. Call OpenAI Images API with verified model
-    const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-image-2.5-sunburst",
-        prompt: literaryPrompt,
-        size: "1536x1024",
-        quality: "high",
-      }),
-    });
-
-    if (!openaiRes.ok) {
-      const errJson = await openaiRes.json().catch(() => ({}));
-      const errMsg = errJson.error?.message || `OpenAI returned status ${openaiRes.status}`;
-      console.error("OpenAI generation failed:", errMsg);
-      return NextResponse.json({ error: `Image generation failed: ${errMsg}` }, { status: 502 });
+    let contextualNotes = "";
+    if (title && typeof title === "string" && title.trim() && prompt && prompt.trim()) {
+      contextualNotes += ` Context title: "${title.trim()}".`;
+    }
+    if (mode && typeof mode === "string") {
+      contextualNotes += ` Editorial mode: ${mode}.`;
+    }
+    if (contentSnippet && typeof contentSnippet === "string" && contentSnippet.trim()) {
+      const cleanSnippet = contentSnippet.trim().replace(/\s+/g, " ").slice(0, 250);
+      contextualNotes += ` Conceptual tone & context: "${cleanSnippet}".`;
     }
 
-    const openaiData = await openaiRes.json();
-    const b64Json = openaiData.data?.[0]?.b64_json;
-    const directUrl = openaiData.data?.[0]?.url;
+    // Marrgin visual identity: fine-art editorial photography, quiet contemplative mood,
+    // natural textures, thoughtful use of negative space, cinematic but believable lighting.
+    // Strictly NO text, NO typography, NO letters, NO words, NO logos, NO watermarks, NO decorative clutter.
+    // Only introduce Ghanaian imagery if explicitly supported by prompt/metadata.
+    const literaryPrompt = `A fine-art editorial photograph for a prestigious literary publication. Subject: ${visualSubject}.${contextualNotes} Style: rich analog medium-format film grain, quiet contemplative mood, natural lighting, restrained composition, authentic physical texture, generous negative space suitable for publication layout. Strictly NO text, NO typography, NO letters, NO words, NO logos, NO watermarks. Avoid generic CGI, digital 3D rendering, cheesy stock-photo aesthetics, or artificial decorative clutter.`;
 
-    if (!b64Json && !directUrl) {
-      return NextResponse.json({ error: "No image data returned from provider." }, { status: 502 });
+    // 4. Call Google Gemini Native Image Generation via ai.interactions.create
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+
+    const primaryModel = process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image";
+    const modelsToTry = [
+      primaryModel,
+      "gemini-2.5-flash-image",
+    ].filter((m, idx, arr): m is string => Boolean(m) && arr.indexOf(m) === idx);
+
+    let imageBase64: string | null = null;
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const interaction = await ai.interactions.create({
+          model: modelName,
+          input: literaryPrompt,
+          response_format: {
+            type: "image",
+            aspect_ratio: "3:2",
+          },
+        });
+
+        // Check direct SDK output_image field
+        if (interaction.output_image?.data) {
+          imageBase64 = interaction.output_image.data;
+          break;
+        }
+
+        // Check steps / content blocks if output_image is nested
+        if ((interaction as any).steps) {
+          for (const step of (interaction as any).steps) {
+            if (step.type === "model_output" && Array.isArray(step.content)) {
+              for (const contentBlock of step.content) {
+                if (contentBlock.type === "image" && contentBlock.data) {
+                  imageBase64 = contentBlock.data;
+                  break;
+                }
+              }
+            }
+            if (imageBase64) break;
+          }
+        }
+
+        if (imageBase64) break;
+      } catch (genErr: any) {
+        lastError = genErr;
+        console.error(`Gemini image generation with ${modelName} failed:`, genErr?.message || genErr);
+      }
     }
 
-    let imageBuffer: Buffer;
-    if (b64Json) {
-      imageBuffer = Buffer.from(b64Json, "base64");
-    } else {
-      const imgFetch = await fetch(directUrl);
-      const arr = await imgFetch.arrayBuffer();
-      imageBuffer = Buffer.from(arr);
+    if (!imageBase64) {
+      const rawMsg = lastError?.message || "No image data returned from Gemini API.";
+      // Sanitize any potential sensitive credentials in error messages
+      const sanitizedMsg = String(rawMsg).replace(/AIza[0-9A-Za-z-_]{35}/g, "[REDACTED]");
+      return NextResponse.json(
+        { error: `Gemini image generation error: ${sanitizedMsg}` },
+        { status: 502 }
+      );
     }
 
-    // 5. Server uploads to Firebase Storage
+    const imageBuffer = Buffer.from(imageBase64, "base64");
+
+    // 5. Server uploads image to Firebase Storage at covers/{pieceId}/{timestamp}.png
     const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "friday-pages-web.firebasestorage.app";
     const cleanPieceId = (pieceId || "piece").replace(/[^a-zA-Z0-9_-]/g, "");
-    const fileName = `covers/${cleanPieceId}_${Date.now()}.png`;
+    const fileName = `covers/${cleanPieceId}/${Date.now()}.png`;
 
     let permanentUrl: string | null = null;
 
@@ -127,32 +169,29 @@ export async function POST(req: NextRequest) {
         const tokenParam = storageData.downloadTokens ? `&token=${storageData.downloadTokens}` : "";
         permanentUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(fileName)}?alt=media${tokenParam}`;
       } else {
-        console.warn(`Firebase Storage returned status ${storageRes.status}`);
+        const storageErr = await storageRes.text().catch(() => "");
+        console.error(`Firebase Storage upload returned ${storageRes.status}:`, storageErr);
+        return NextResponse.json(
+          { error: `Firebase Storage upload failed with status ${storageRes.status}. Please check storage bucket and permissions.` },
+          { status: 502 }
+        );
       }
-    } catch (storageErr) {
-      console.warn("Firebase Storage upload exception:", storageErr);
-    }
-
-    // Resilient fallback: if Firebase Storage bucket is not yet provisioned in console
-    if (!permanentUrl) {
-      try {
-        const publicCoversDir = path.join(process.cwd(), "public", "covers");
-        if (!fs.existsSync(publicCoversDir)) {
-          fs.mkdirSync(publicCoversDir, { recursive: true });
-        }
-        const localFileName = `${cleanPieceId}_${Date.now()}.png`;
-        const localFilePath = path.join(publicCoversDir, localFileName);
-        fs.writeFileSync(localFilePath, imageBuffer);
-        permanentUrl = `/covers/${localFileName}`;
-      } catch (localSaveErr) {
-        console.error("Local cover save error:", localSaveErr);
-      }
+    } catch (storageException: any) {
+      console.error("Firebase Storage exception during cover upload:", storageException);
+      return NextResponse.json(
+        { error: `Firebase Storage upload error: ${storageException.message || "Failed to persist to storage"}` },
+        { status: 502 }
+      );
     }
 
     if (!permanentUrl) {
-      return NextResponse.json({ error: "Failed to persist generated cover image." }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to obtain permanent download URL from Firebase Storage." },
+        { status: 500 }
+      );
     }
 
+    // 6. Return persistent download URL to client
     return NextResponse.json({ coverImage: permanentUrl });
   } catch (err: any) {
     console.error("Generate cover route error:", err);

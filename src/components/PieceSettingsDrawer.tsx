@@ -36,6 +36,7 @@ interface PieceSettingsDrawerProps {
   onCoverImagePromptChange?: (val: string) => void;
   pieceId?: string;
   pieceTitle?: string;
+  contentSnippet?: string;
   isFeatured: boolean;
   onIsFeaturedChange: (val: boolean) => void;
   
@@ -131,9 +132,10 @@ export default function PieceSettingsDrawer({
   onCoverImagePromptChange,
   pieceId,
   pieceTitle,
+  contentSnippet,
 }: PieceSettingsDrawerProps) {
   // ---------------------------------------------------------------------------
-  // AI Cover Generation via authenticated /api/generate-cover (OpenAI backend)
+  // AI Cover Generation via authenticated /api/generate-cover (Gemini backend)
   // ---------------------------------------------------------------------------
   const [internalPrompt, setInternalPrompt] = useState(coverImagePrompt);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -171,6 +173,7 @@ export default function PieceSettingsDrawer({
           prompt: internalPrompt.trim(),
           title: pieceTitle,
           mode,
+          contentSnippet,
         }),
       });
 
@@ -326,7 +329,7 @@ export default function PieceSettingsDrawer({
                     onClick={handleGenerateCover}
                     disabled={isGeneratingImage}
                     className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-medium hover:bg-neutral-700 dark:hover:bg-neutral-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Generate AI cover image with OpenAI"
+                    title="Generate AI cover image with Gemini"
                   >
                     {isGeneratingImage
                       ? <Loader2 size={13} className="animate-spin" />

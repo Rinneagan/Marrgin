@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore, initializeFirestore, Firestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 
 const firebaseConfig = {
@@ -15,6 +16,7 @@ const firebaseConfig = {
 // Initialize Firebase only once
 const app = getApps().find((a) => a.name === "[DEFAULT]") || initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const storage = getStorage(app);
 let db: Firestore;
 try {
   db = initializeFirestore(app, {
@@ -24,5 +26,5 @@ try {
   db = getFirestore(app);
 }
 
-export { app, auth, db };
+export { app, auth, db, storage };
 

@@ -36,7 +36,7 @@ try {
   // ignore
 }
 
-const SINGLE_ADMIN_UID = "O0ePpSc6JTUrMKZ0cLZ2FM7eGPh2";
+const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
