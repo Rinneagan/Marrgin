@@ -38,6 +38,7 @@ import {
   Link as LinkIcon,
   Shield,
   RotateCw,
+  RotateCcw,
   Maximize2,
   Minimize2,
   Share2,
@@ -89,6 +90,7 @@ function WritingDeskContent() {
   const [location, setLocation] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [coverImage, setCoverImage] = useState("");
+  const [coverImagePrompt, setCoverImagePrompt] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
 
   // Zen Mode (Distraction-free)
@@ -185,6 +187,7 @@ function WritingDeskContent() {
       setLocation(piece.location || "");
       setTagsInput(piece.tags?.join(", ") || "");
       setCoverImage(piece.coverImage || "");
+      setCoverImagePrompt(piece.coverImagePrompt || "");
       setIsFeatured(Boolean((piece as any).isFeatured));
       setEpigraph(piece.epigraph || "");
       setDedication(piece.dedication || "");
@@ -224,6 +227,7 @@ function WritingDeskContent() {
       location,
       tags,
       coverImage,
+      coverImagePrompt: coverImagePrompt.trim() || undefined,
       isVaulted,
       passphrase: isVaulted ? passphrase.trim() : "",
       epigraph,
@@ -244,7 +248,7 @@ function WritingDeskContent() {
     } as any;
   }, [
     activePieceId, title, subtitle, content, mode, status, scheduledAt, publishedAt,
-    location, tagsInput, coverImage, isVaulted, passphrase, epigraph, dedication,
+    location, tagsInput, coverImage, coverImagePrompt, isVaulted, passphrase, epigraph, dedication,
     footnote, afterword, centralQuestion, methodology, limitations, observationDate,
     datasetName, dataSource, dataUnits, dataTimeframe, user, userDisplayName, isFeatured
   ]);
@@ -644,18 +648,44 @@ function WritingDeskContent() {
               <span className="hidden sm:inline">Preview</span>
             </button>
 
+            {status === "published" && activePieceId && (
+              <button
+                type="button"
+                onClick={() => handleUnpublishPiece(activePieceId)}
+                className="px-3 py-1.5 rounded-full border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 text-xs font-sans font-medium transition-colors flex items-center gap-1.5"
+                title="Unpublish this piece back to draft"
+              >
+                <RotateCcw size={12} />
+                <span>Unpublish</span>
+              </button>
+            )}
+
             <button
-              onClick={() => setIsPublishModalOpen(true)}
+              onClick={() => {
+                if (status === "published") {
+                  performSave("published");
+                } else {
+                  setIsPublishModalOpen(true);
+                }
+              }}
               className="px-4 py-1.5 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-neutral-200 text-xs font-sans font-medium transition-colors flex items-center gap-1.5 shadow-sm"
             >
-              <Send size={12} />
-              <span>
-                {status === "published"
-                  ? "Update"
-                  : status === "scheduled"
-                  ? "Scheduled"
-                  : "Publish"}
-              </span>
+              {status === "published" ? (
+                <>
+                  <Check size={12} />
+                  <span>Save Changes</span>
+                </>
+              ) : status === "scheduled" ? (
+                <>
+                  <Clock size={12} />
+                  <span>Scheduled</span>
+                </>
+              ) : (
+                <>
+                  <Send size={12} />
+                  <span>Publish</span>
+                </>
+              )}
             </button>
           </div>
         </header>
@@ -814,6 +844,13 @@ function WritingDeskContent() {
           setDataTimeframe(val);
           triggerAutosave();
         }}
+        coverImagePrompt={coverImagePrompt}
+        onCoverImagePromptChange={(val) => {
+          setCoverImagePrompt(val);
+          triggerAutosave();
+        }}
+        pieceId={activePieceId || undefined}
+        pieceTitle={title}
       />
 
       {/* Private Editorial Workspace Drawer (Investigations) */}

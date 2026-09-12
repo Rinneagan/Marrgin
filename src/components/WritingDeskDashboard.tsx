@@ -14,7 +14,8 @@ import {
   Trash2, 
   Eye, 
   Archive,
-  X
+  X,
+  Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -196,30 +197,39 @@ export default function WritingDeskDashboard({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenPiece(draft.id);
+                        }}
+                        className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5"
+                        title="Edit draft in Studio"
+                      >
+                        <Pencil size={11} />
+                        <span>Edit</span>
+                        <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onPreviewPiece(draft);
                         }}
-                        className="p-1.5 text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors rounded-md"
+                        className="p-1.5 text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors rounded-full border border-gray-200 dark:border-gray-800"
                         title="Preview draft"
                       >
-                        <Eye size={14} />
+                        <Eye size={13} />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onDeleteDraft(draft.id);
                         }}
-                        className="p-1.5 text-neutral-400 hover:text-rose-500 transition-colors rounded-md"
+                        className="p-1.5 text-neutral-400 hover:text-rose-500 transition-colors rounded-full border border-gray-200 dark:border-gray-800"
                         title="Delete draft"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                       </button>
-                      <span className="inline-flex items-center text-xs font-mono text-amber-900 dark:text-amber-400 ml-1">
-                        Edit <ArrowRight size={12} className="ml-1 group-hover:translate-x-0.5 transition-transform" />
-                      </span>
                     </div>
                   </div>
                 ))}
@@ -345,13 +355,24 @@ export default function WritingDeskDashboard({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenPiece(piece.id);
+                        }}
+                        className="px-3 py-1 text-xs font-sans font-medium text-amber-900 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-full transition-colors inline-flex items-center gap-1.5 shadow-xs"
+                        title="Edit published piece in Studio"
+                      >
+                        <Pencil size={11} />
+                        <span>Edit</span>
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onPreviewPiece(piece);
                         }}
-                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 rounded border border-gray-200 dark:border-gray-800"
+                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 rounded-full border border-gray-200 dark:border-gray-800 transition-colors"
                         title="View reader layout"
                       >
                         Preview
@@ -361,7 +382,7 @@ export default function WritingDeskDashboard({
                           e.stopPropagation();
                           onUnpublishPiece(piece.id);
                         }}
-                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-amber-600 rounded border border-gray-200 dark:border-gray-800"
+                        className="px-2.5 py-1 text-xs font-sans text-neutral-500 hover:text-amber-600 rounded-full border border-gray-200 dark:border-gray-800 transition-colors"
                         title="Unpublish back to draft"
                       >
                         Unpublish
@@ -371,7 +392,7 @@ export default function WritingDeskDashboard({
                           e.stopPropagation();
                           onArchivePiece(piece.id);
                         }}
-                        className="p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 rounded"
+                        className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                         title="Archive piece"
                       >
                         <Archive size={14} />

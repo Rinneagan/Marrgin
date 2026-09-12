@@ -234,6 +234,7 @@ export interface Piece extends Poem {
   status?: "draft" | "published" | "archived" | "scheduled";
   publishedAt?: any;
   scheduledAt?: any;
+  coverImagePrompt?: string;
   slug?: string;
   tags?: string[];
   readingTimeMinutes?: number;

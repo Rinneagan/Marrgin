@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { EditorialMode, Piece } from "@/lib/db";
+import { auth } from "@/lib/firebase";
 import { 
   X, 
   Settings, 
@@ -31,6 +32,10 @@ interface PieceSettingsDrawerProps {
   onTagsInputChange: (val: string) => void;
   coverImage: string;
   onCoverImageChange: (val: string) => void;
+  coverImagePrompt?: string;
+  onCoverImagePromptChange?: (val: string) => void;
+  pieceId?: string;
+  pieceTitle?: string;
   isFeatured: boolean;
   onIsFeaturedChange: (val: boolean) => void;
   
@@ -122,34 +127,68 @@ export default function PieceSettingsDrawer({
   onDataUnitsChange,
   dataTimeframe,
   onDataTimeframeChange,
+  coverImagePrompt = "",
+  onCoverImagePromptChange,
+  pieceId,
+  pieceTitle,
 }: PieceSettingsDrawerProps) {
   // ---------------------------------------------------------------------------
-  // AI Cover Generation — local state only, does not touch the piece data model
-  // Persistence path: identical to manual URL entry via onCoverImageChange(url)
+  // AI Cover Generation via authenticated /api/generate-cover (OpenAI backend)
   // ---------------------------------------------------------------------------
-  const [coverImagePrompt, setCoverImagePrompt] = useState("");
+  const [internalPrompt, setInternalPrompt] = useState(coverImagePrompt);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [generateError, setGenerateError] = useState("");
 
+  useEffect(() => {
+    setInternalPrompt(coverImagePrompt || "");
+  }, [coverImagePrompt]);
+
+  const handlePromptChange = (val: string) => {
+    setInternalPrompt(val);
+    onCoverImagePromptChange?.(val);
+  };
+
   const handleGenerateCover = async () => {
-    if (!coverImagePrompt.trim() || isGeneratingImage) return;
+    if (isGeneratingImage) return;
     setIsGeneratingImage(true);
     setGenerateError("");
+
     try {
-      // Historical Pollinations.ai endpoint — no API key, no backend route
-      const seed = Math.floor(Math.random() * 999999);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(coverImagePrompt.trim())}?seed=${seed}&width=1200&height=800&nologo=true`;
-      // Pre-load the image to confirm it resolved before updating the piece
-      await new Promise<void>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Image failed to load from Pollinations."));
-        img.src = url;
+      // Obtain Firebase Auth ID token for admin authorization
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        throw new Error("Authentication required. Please ensure you are logged in as admin.");
+      }
+
+      const res = await fetch("/api/generate-cover", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pieceId,
+          prompt: internalPrompt.trim(),
+          title: pieceTitle,
+          mode,
+        }),
       });
-      // Follows the exact same persistence path as a manually entered URL
-      onCoverImageChange(url);
-    } catch (e) {
-      setGenerateError("Generation failed. Check your connection and try again.");
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Generation failed with status ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data.coverImage) {
+        throw new Error("No cover image returned from server.");
+      }
+
+      // Update cover image; never destroys existing image if generation fails
+      onCoverImageChange(data.coverImage);
+    } catch (e: any) {
+      console.error("Cover generation error:", e);
+      setGenerateError(e.message || "Failed to generate cover image. Please try again.");
     } finally {
       setIsGeneratingImage(false);
     }
@@ -275,25 +314,25 @@ export default function PieceSettingsDrawer({
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. A melancholic rainy city in watercolor"
-                    value={coverImagePrompt}
-                    onChange={(e) => setCoverImagePrompt(e.target.value)}
+                    placeholder="e.g. A weathered pink concrete wall, Kumasi dusk"
+                    value={internalPrompt}
+                    onChange={(e) => handlePromptChange(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleGenerateCover(); } }}
                     disabled={isGeneratingImage}
-                    className="flex-1 bg-neutral-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-neutral-800 dark:text-neutral-200 outline-none focus:border-amber-500 disabled:opacity-50"
+                    className="flex-1 bg-neutral-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-2 text-neutral-800 dark:text-neutral-200 outline-none focus:border-amber-500 disabled:opacity-50 text-xs"
                   />
                   <button
                     type="button"
                     onClick={handleGenerateCover}
-                    disabled={isGeneratingImage || !coverImagePrompt.trim()}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-medium hover:bg-neutral-700 dark:hover:bg-neutral-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Generate AI cover image via Pollinations.ai"
+                    disabled={isGeneratingImage}
+                    className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-medium hover:bg-neutral-700 dark:hover:bg-neutral-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Generate AI cover image with OpenAI"
                   >
                     {isGeneratingImage
                       ? <Loader2 size={13} className="animate-spin" />
                       : <Wand2 size={13} />}
                     <span className="hidden sm:inline">
-                      {isGeneratingImage ? "Generating…" : "Generate"}
+                      {isGeneratingImage ? "Generating…" : coverImage ? "Regenerate" : "Generate"}
                     </span>
                   </button>
                 </div>
