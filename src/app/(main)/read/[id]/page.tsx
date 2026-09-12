@@ -56,6 +56,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
   const poemRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isUnpublishing, setIsUnpublishing] = useState(false);
   
   // Anthologies / Collections
   const [isCollectionModalOpen, setIsCollectionModalOpen] = useState(false);
@@ -261,7 +262,6 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
   };
 
   const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
-  const [isUnpublishing, setIsUnpublishing] = useState(false);
 
   const handleUnpublish = async () => {
     if (!piece) return;
