@@ -53,6 +53,7 @@ import AdminAccountModal from "@/components/AdminAccountModal";
 import { BlockCanvas } from "@/components/studio/BlockCanvas";
 import { SocialPreviewModal } from "@/components/studio/SocialPreviewModal";
 import { EditorialToast, ToastItem } from "@/components/EditorialToast";
+import { fireCelebratoryConfetti } from "@/lib/celebrate";
 
 const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
 
@@ -456,6 +457,7 @@ function WritingDeskContent() {
       await performSave("published");
       setIsPublishModalOpen(false);
       refreshDeskData();
+      fireCelebratoryConfetti();
       showToast("Piece published successfully across Marrgin.", "success", "Published Live");
     }
   };
