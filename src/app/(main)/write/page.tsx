@@ -52,6 +52,7 @@ import EditorialWorkspaceDrawer from "@/components/EditorialWorkspaceDrawer";
 import AdminAccountModal from "@/components/AdminAccountModal";
 import { BlockCanvas } from "@/components/studio/BlockCanvas";
 import { SocialPreviewModal } from "@/components/studio/SocialPreviewModal";
+import { EditorialToast, ToastItem } from "@/components/EditorialToast";
 
 const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
 
@@ -118,6 +119,11 @@ function WritingDeskContent() {
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isSocialPreviewOpen, setIsSocialPreviewOpen] = useState(false);
+  const [toast, setToast] = useState<ToastItem | null>(null);
+
+  const showToast = (message: string, type: "success" | "info" | "warning" | "error" = "success", title?: string) => {
+    setToast({ id: Date.now(), message, type, title });
+  };
 
   // Autosave & Persistence State
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "error">("saved");
@@ -386,9 +392,10 @@ function WritingDeskContent() {
         window.history.pushState(null, "", "/write");
       }
       refreshDeskData();
+      showToast("Draft deleted permanently.", "info", "Draft Removed");
     } catch (err) {
       console.error("Failed to delete draft:", err);
-      alert("Error deleting draft.");
+      showToast("Error deleting draft.", "error");
     }
   };
 
@@ -403,9 +410,10 @@ function WritingDeskContent() {
         setStatus("draft");
       }
       refreshDeskData();
+      showToast("Piece returned to your private drafts.", "info", "Unpublished");
     } catch (err) {
       console.error("Failed to unpublish piece:", err);
-      alert("Error unpublishing piece.");
+      showToast("Error unpublishing piece.", "error");
     }
   };
 
@@ -417,20 +425,21 @@ function WritingDeskContent() {
         setStatus("archived");
       }
       refreshDeskData();
+      showToast("Piece moved to archive.", "info", "Archived");
     } catch (err) {
       console.error("Failed to archive piece:", err);
-      alert("Error archiving piece.");
+      showToast("Error archiving piece.", "error");
     }
   };
 
   // Publishing Confirmation Workflow
   const handleConfirmPublish = async (options?: { scheduledAt?: string }) => {
     if (!title.trim() || !content.trim()) {
-      alert("Please provide both a title and content before publishing.");
+      showToast("Please provide both a title and content before publishing.", "warning", "Content Required");
       return;
     }
     if (isVaulted && !passphrase.trim()) {
-      alert("Please provide a passphrase for the vaulted piece.");
+      showToast("Please provide a passphrase for the vaulted piece.", "warning", "Passphrase Required");
       return;
     }
 
@@ -438,12 +447,16 @@ function WritingDeskContent() {
       await performSave("scheduled", options.scheduledAt);
       setIsPublishModalOpen(false);
       refreshDeskData();
-      alert(`Piece scheduled for publication on ${new Date(options.scheduledAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.`);
+      showToast(
+        `Piece scheduled for publication on ${new Date(options.scheduledAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}.`,
+        "info",
+        "Piece Scheduled"
+      );
     } else {
       await performSave("published");
       setIsPublishModalOpen(false);
       refreshDeskData();
-      alert("Piece published successfully across Marrgin.");
+      showToast("Piece published successfully across Marrgin.", "success", "Published Live");
     }
   };
 
@@ -907,6 +920,9 @@ function WritingDeskContent() {
           user={user}
         />
       )}
+
+      {/* Editorial Toast Notification */}
+      <EditorialToast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

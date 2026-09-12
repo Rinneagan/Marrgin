@@ -38,18 +38,20 @@ export default function PublishConfirmationModal({
   const [scheduledDateTime, setScheduledDateTime] = useState<string>(
     piece.scheduledAt ? new Date(piece.scheduledAt).toISOString().slice(0, 16) : getDefaultScheduledDate()
   );
+  const [scheduleError, setScheduleError] = useState("");
 
   if (!isOpen) return null;
 
   const handleAction = async () => {
+    setScheduleError("");
     if (publishAction === "schedule") {
       if (!scheduledDateTime) {
-        alert("Please choose a future date and time for scheduled publication.");
+        setScheduleError("Please choose a future date and time for scheduled publication.");
         return;
       }
       const selectedMs = new Date(scheduledDateTime).getTime();
       if (selectedMs <= Date.now()) {
-        alert("Please select a time in the future.");
+        setScheduleError("Please select a time in the future.");
         return;
       }
       await onConfirmPublish({ scheduledAt: new Date(scheduledDateTime).toISOString() });
@@ -139,6 +141,11 @@ export default function PublishConfirmationModal({
               <p className="text-[11px] text-neutral-400 mt-1.5">
                 The piece will remain private until this time arrives, when the server transitions it to published.
               </p>
+              {scheduleError && (
+                <p className="text-xs text-rose-500 font-sans mt-2 flex items-center gap-1">
+                  {scheduleError}
+                </p>
+              )}
             </div>
           )}
 
