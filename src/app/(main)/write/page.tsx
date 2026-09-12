@@ -114,6 +114,7 @@ function WritingDeskContent() {
   const [dataSource, setDataSource] = useState("");
   const [dataUnits, setDataUnits] = useState("");
   const [dataTimeframe, setDataTimeframe] = useState("");
+  const [fontSize, setFontSize] = useState<"small" | "medium" | "large">("medium");
 
   // UI Modals & Drawers
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
@@ -212,6 +213,7 @@ function WritingDeskContent() {
       setDataUnits(piece.dataUnits || "");
       setDataTimeframe(piece.dataTimeframe || "");
       setChapter(piece.chapter || "");
+      setFontSize((piece as any).fontSize || "medium");
       setSaveStatus("saved");
       hasPendingChangesRef.current = false;
     });
@@ -252,6 +254,7 @@ function WritingDeskContent() {
       dataUnits,
       dataTimeframe,
       chapter: chapter || undefined,
+      fontSize,
       authorId: user?.uid || "anonymous",
       authorName: userDisplayName,
       ...(isFeatured ? { isFeatured: true } : { isFeatured: false }),
@@ -260,7 +263,7 @@ function WritingDeskContent() {
     activePieceId, title, subtitle, content, mode, status, scheduledAt, publishedAt,
     location, tagsInput, coverImage, coverImagePrompt, isVaulted, passphrase, epigraph, dedication,
     footnote, afterword, centralQuestion, methodology, limitations, observationDate,
-    datasetName, dataSource, dataUnits, dataTimeframe, user, userDisplayName, isFeatured, chapter
+    datasetName, dataSource, dataUnits, dataTimeframe, user, userDisplayName, isFeatured, chapter, fontSize
   ]);
 
   // Core Persistent Save Implementation
@@ -503,6 +506,7 @@ function WritingDeskContent() {
       centralQuestion,
       methodology,
       limitations,
+      fontSize,
     };
 
     return (
@@ -522,6 +526,7 @@ function WritingDeskContent() {
             setSubtitle(piece.subtitle || "");
             setContent(piece.content || "");
             setMode(piece.mode || "poetry");
+            setFontSize((piece as any).fontSize || "medium");
             setLocation(piece.location || "");
             setEpigraph(piece.epigraph || "");
             setDedication(piece.dedication || "");
@@ -534,6 +539,8 @@ function WritingDeskContent() {
           }}
           onOpenAdminAccount={() => setIsAdminAccountModalOpen(true)}
           userDisplayName={userDisplayName}
+          currentUserId={user?.uid}
+          isAdmin={isAdmin}
         />
         {user && (
           <AdminAccountModal
@@ -618,8 +625,30 @@ function WritingDeskContent() {
             )}
           </div>
 
-          {/* Right: Actions (Zen, Social Preview, Settings, Preview, Publish) */}
+          {/* Right: Actions (Font Size, Zen, Social Preview, Settings, Preview, Publish) */}
           <div className="flex items-center gap-2">
+            {/* Reading Font Size Toggle */}
+            <div className="hidden sm:flex items-center rounded-full border border-gray-200 dark:border-gray-800 p-0.5 text-xs font-sans">
+              {(["small", "medium", "large"] as const).map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => {
+                    setFontSize(size);
+                    triggerAutosave();
+                  }}
+                  className={`px-2 py-0.5 rounded-full capitalize text-[11px] font-medium transition-colors ${
+                    fontSize === size
+                      ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 shadow-xs"
+                      : "text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+                  }`}
+                  title={`Reading Font Size: ${size}`}
+                >
+                  {size === "small" ? "Small" : size === "medium" ? "Medium" : "Large"}
+                </button>
+              ))}
+            </div>
+
             <button
               onClick={() => setIsZenMode(true)}
               className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-full border border-gray-200 dark:border-gray-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 text-xs font-sans font-medium transition-colors flex items-center gap-1"
@@ -756,6 +785,7 @@ function WritingDeskContent() {
           blocks={blocks}
           mode={mode}
           onChange={handleBlocksChange}
+          fontSize={fontSize}
         />
       </main>
 
@@ -875,6 +905,11 @@ function WritingDeskContent() {
         pieceId={activePieceId || undefined}
         pieceTitle={title}
         contentSnippet={content ? content.slice(0, 300) : undefined}
+        fontSize={fontSize}
+        onFontSizeChange={(size) => {
+          setFontSize(size);
+          triggerAutosave();
+        }}
       />
 
       {/* Private Editorial Workspace Drawer (Investigations) */}

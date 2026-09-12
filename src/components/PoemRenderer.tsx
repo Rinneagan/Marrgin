@@ -9,6 +9,7 @@ interface PoemRendererProps {
   echoedLines?: number[];
   onLineClick?: (index: number) => void;
   revisionDraft?: number;
+  fontSize?: "small" | "medium" | "large";
 }
 
 const emotionalTypography = (word: string) => {
@@ -47,7 +48,8 @@ export default function PoemRenderer({
   onHoverLine,
   echoedLines = [],
   onLineClick,
-  revisionDraft = 100
+  revisionDraft = 100,
+  fontSize = "medium"
 }: PoemRendererProps) {
   const blocks = content.split(/(<fold>[\s\S]*?<\/fold>)/g);
   
@@ -109,11 +111,16 @@ export default function PoemRenderer({
     });
   };
 
+  const defaultPoemSizeClass = 
+    fontSize === 'small' ? "font-poem text-xl md:text-2xl lg:text-3xl text-center leading-[2.2] tracking-wide" :
+    fontSize === 'large' ? "font-poem text-3xl md:text-4xl lg:text-5xl text-center leading-[2.8] tracking-wide" :
+    "font-poem text-2xl md:text-3xl lg:text-4xl text-center leading-[2.5] tracking-wide";
+
   return (
     <div className={`
       ${aesthetic === 'typewriter' ? "font-mono text-xl md:text-2xl tracking-tight leading-[2.5]" : ""}
       ${aesthetic === 'brutalist' ? "font-sans font-black uppercase text-3xl md:text-5xl lg:text-7xl tracking-tighter leading-[1.1]" : ""}
-      ${!aesthetic || aesthetic === 'default' ? "font-poem text-2xl md:text-3xl lg:text-4xl text-center leading-[2.5] tracking-wide" : ""}
+      ${!aesthetic || aesthetic === 'default' ? defaultPoemSizeClass : ""}
       transition-colors duration-1000 
       ${isReadInDark ? "bg-black p-8 rounded-3xl" : "text-gray-800 dark:text-gray-200"}
     `}

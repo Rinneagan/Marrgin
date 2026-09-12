@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import { getPoemById, Piece, CommentData, getComments, trackPoemRead, getCollectionsForUser, createCollection, addPoemToCollection, Collection, deletePoem, EditorialMode } from "@/lib/db";
+import { getPoemById, Piece, CommentData, getComments, trackPoemRead, getCollectionsForUser, createCollection, addPoemToCollection, Collection, deletePoem, unpublishPiece, EditorialMode } from "@/lib/db";
 import Link from "next/link";
 import { motion, useScroll, useSpring, AnimatePresence } from "framer-motion";
 import { useZenMode } from "@/context/ZenContext";
-import { Wind, Moon, ArrowDown, Activity, Download, Trash2 } from "lucide-react";
+import { Wind, Moon, ArrowDown, Activity, Download, Trash2, Pencil, RotateCcw } from "lucide-react";
 import PoemRenderer from "@/components/PoemRenderer";
 import PieceHeader from "@/components/PieceHeader";
 import ProseRenderer from "@/components/ProseRenderer";
@@ -260,6 +260,24 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
     }
   };
 
+  const SINGLE_ADMIN_UID = "54WZPYBFR8VIPv9qpIDn1FI0bcz1";
+  const [isUnpublishing, setIsUnpublishing] = useState(false);
+
+  const handleUnpublish = async () => {
+    if (!piece) return;
+    if (!confirm("Unpublish this piece? It will be returned to your private drafts in Writing Desk.")) return;
+    setIsUnpublishing(true);
+    try {
+      await unpublishPiece(piece.id);
+      router.push("/write");
+    } catch (err) {
+      console.error("Failed to unpublish piece", err);
+      alert("Failed to unpublish piece. Please try again.");
+    } finally {
+      setIsUnpublishing(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!piece) return;
     try {
@@ -443,15 +461,35 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
             <span>{isExporting ? "Tearing..." : "Tear Out"}</span>
           </button>
           
-          {/* Author Burn Page */}
-          {user?.uid === piece.authorId && (
-            <button 
-              onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-500 hover:text-white dark:hover:bg-red-600 dark:hover:text-white text-xs font-medium"
-            >
-              <Trash2 size={15} />
-              <span>Burn Page</span>
-            </button>
+          {/* Author & Publisher Controls */}
+          {user && (user.uid === piece.authorId || user.uid === SINGLE_ADMIN_UID) && (
+            <div className="flex items-center gap-2">
+              <Link 
+                href={`/write?id=${piece.id}`}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all bg-white/40 dark:bg-black/20 border border-gray-200 dark:border-gray-800 text-gray-500 hover:text-black dark:hover:text-white hover:border-accent text-xs font-medium"
+                title="Edit this piece in Writing Desk"
+              >
+                <Pencil size={14} />
+                <span>Edit</span>
+              </Link>
+              <button 
+                onClick={handleUnpublish}
+                disabled={isUnpublishing}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-600 dark:hover:text-white text-xs font-medium disabled:opacity-50"
+                title="Unpublish this piece back to private drafts"
+              >
+                <RotateCcw size={14} className={isUnpublishing ? "animate-spin" : ""} />
+                <span>{isUnpublishing ? "Unpublishing..." : "Unpublish"}</span>
+              </button>
+              <button 
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-500 hover:text-white dark:hover:bg-red-600 dark:hover:text-white text-xs font-medium"
+                title="Permanently delete piece"
+              >
+                <Trash2 size={14} />
+                <span>Burn Page</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -504,6 +542,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
                       echoedLines={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
                       onLineClick={handleLineClick}
                       revisionDraft={revisionDraft}
+                      fontSize={piece.fontSize || "medium"}
                     />
                   </div>
                   {piece.translationContent && (
@@ -515,6 +554,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
                         hoveredLineIndex={hoveredLineIndex}
                         onHoverLine={setHoveredLineIndex}
                         revisionDraft={revisionDraft}
+                        fontSize={piece.fontSize || "medium"}
                       />
                     </div>
                   )}
@@ -578,6 +618,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
                 onParagraphClick={handleParagraphClick}
                 echoedParagraphs={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
                 mode="essay"
+                fontSize={piece.fontSize || "medium"}
               />
 
               {piece.footnote && (
@@ -606,6 +647,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
                 onParagraphClick={handleParagraphClick}
                 echoedParagraphs={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
                 mode="investigation"
+                fontSize={piece.fontSize || "medium"}
               />
 
               {/* How we reported this (Methodology Disclosure) */}
@@ -663,6 +705,7 @@ export default function ReadingPage({ params }: { params: Promise<{ id: string }
                 onParagraphClick={handleParagraphClick}
                 echoedParagraphs={comments.map(c => c.lineIndex).filter(i => i !== null) as number[]}
                 mode="data-story"
+                fontSize={piece.fontSize || "medium"}
               />
 
               <MethodologyDisclosure methodology={piece.methodology} />

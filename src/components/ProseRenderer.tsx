@@ -6,6 +6,7 @@ interface ProseRendererProps {
   onParagraphClick?: (index: number, text: string) => void;
   echoedParagraphs?: number[];
   mode?: string;
+  fontSize?: "small" | "medium" | "large";
 }
 
 export default function ProseRenderer({
@@ -14,6 +15,7 @@ export default function ProseRenderer({
   onParagraphClick,
   echoedParagraphs = [],
   mode = "essay",
+  fontSize = "medium",
 }: ProseRendererProps) {
   // Normalize Windows line breaks and split into paragraphs
   const rawParagraphs = content.replace(/\r\n/g, "\n").split(/\n\s*\n/);
@@ -97,11 +99,18 @@ export default function ProseRenderer({
         }
 
         // Standard Long-form Prose Paragraph
+        const paragraphSizeClass =
+          fontSize === "small"
+            ? "text-base md:text-[18px] leading-[1.85]"
+            : fontSize === "large"
+            ? "text-xl md:text-[23px] leading-[2.25]"
+            : "text-lg md:text-[21px] leading-[2.1]";
+
         return (
           <p
             key={idx}
             onClick={() => onParagraphClick?.(idx, trimmed)}
-            className={`font-serif text-lg md:text-[21px] leading-[2.1] tracking-normal mb-8 relative transition-colors duration-300 ${
+            className={`font-serif ${paragraphSizeClass} tracking-normal mb-8 relative transition-colors duration-300 ${
               isReadInDark
                 ? "text-gray-300"
                 : "text-gray-800 dark:text-gray-200"

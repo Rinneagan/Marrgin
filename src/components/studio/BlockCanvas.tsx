@@ -20,9 +20,10 @@ interface BlockCanvasProps {
   mode: EditorialMode;
   onChange: (blocks: StudioBlock[]) => void;
   readOnly?: boolean;
+  fontSize?: "small" | "medium" | "large";
 }
 
-export function BlockCanvas({ blocks, mode, onChange, readOnly = false }: BlockCanvasProps) {
+export function BlockCanvas({ blocks, mode, onChange, readOnly = false, fontSize = "medium" }: BlockCanvasProps) {
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [slashMenuBlockId, setSlashMenuBlockId] = useState<string | null>(null);
   const [slashFilter, setSlashFilter] = useState<string>("");
@@ -381,11 +382,19 @@ export function BlockCanvas({ blocks, mode, onChange, readOnly = false }: BlockC
           placeholder = "List items (one per line)...";
         } else if (mode === "poetry" || block.type === "poetry-stanza") {
           // Poetry stanza: Cormorant Garamond, generous line-height, quiet elegance
-          blockStyles += "font-serif text-xl md:text-2xl leading-[2.1] text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap tracking-wide";
+          const poetrySizeClass = 
+            fontSize === "small" ? "text-lg md:text-xl leading-[1.85]" :
+            fontSize === "large" ? "text-2xl md:text-3xl leading-[2.3]" :
+            "text-xl md:text-2xl leading-[2.1]";
+          blockStyles += `font-serif ${poetrySizeClass} text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap tracking-wide`;
           placeholder = `Stanza ${index + 1} (Enter for line, Shift+Enter for new stanza)...`;
         } else {
           // Standard Paragraph
-          blockStyles += "font-serif text-lg md:text-xl leading-relaxed text-neutral-800 dark:text-neutral-200";
+          const paragraphSizeClass = 
+            fontSize === "small" ? "text-base md:text-lg leading-[1.8]" :
+            fontSize === "large" ? "text-xl md:text-2xl leading-[2.2]" :
+            "text-lg md:text-xl leading-relaxed";
+          blockStyles += `font-serif ${paragraphSizeClass} text-neutral-800 dark:text-neutral-200`;
         }
 
         return (

@@ -18,7 +18,8 @@ import {
   Image as ImageIcon,
   Wand2,
   Loader2,
-  CloudRain
+  CloudRain,
+  Type
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -27,6 +28,8 @@ interface PieceSettingsDrawerProps {
   onClose: () => void;
   mode: EditorialMode;
   onModeChange: (newMode: EditorialMode) => void;
+  fontSize?: "small" | "medium" | "large";
+  onFontSizeChange?: (val: "small" | "medium" | "large") => void;
   location: string;
   onLocationChange: (val: string) => void;
   tagsInput: string;
@@ -94,6 +97,8 @@ export default function PieceSettingsDrawer({
   onClose,
   mode,
   onModeChange,
+  fontSize = "medium",
+  onFontSizeChange,
   location,
   onLocationChange,
   tagsInput,
@@ -262,6 +267,32 @@ export default function PieceSettingsDrawer({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Reading Font Size */}
+              <div className="space-y-1.5">
+                <label className="font-mono uppercase tracking-widest text-neutral-400 flex items-center gap-1.5">
+                  <Type size={12} /> Reading Font Size
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["small", "medium", "large"] as const).map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => onFontSizeChange?.(size)}
+                      className={`py-2 px-3 rounded-xl border text-xs font-sans capitalize transition-colors text-center ${
+                        fontSize === size
+                          ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-300 font-medium"
+                          : "border-gray-200 dark:border-gray-800 text-neutral-600 dark:text-neutral-400 hover:border-neutral-400"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-neutral-400">
+                  Sets the reading scale in the studio preview and on the published reading page.
+                </p>
               </div>
 
               {/* 2. Geography / Location */}
