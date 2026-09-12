@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { HfInference } from "@huggingface/inference";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { getAdminIdToken, SINGLE_ADMIN_UID } from "@/lib/serverFirestoreRest";
+import sharp from "sharp";
 
 // Verify admin identity from Bearer token via Firebase Identity Toolkit
 async function verifyAdminFromHeader(req: NextRequest): Promise<boolean> {
@@ -41,21 +42,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Validate Server Environment: Hugging Face (Free, No Billing) or Gemini
+    // 2. Validate Server Environment: Hugging Face (Free, No Billing) or Gemini or Pollinations fallback
     const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
     const hasValidHfToken = Boolean(hfToken && !hfToken.includes("your-huggingface-token") && hfToken.trim());
 
     const geminiApiKey = process.env.GEMINI_API_KEY;
     const hasValidGeminiKey = Boolean(geminiApiKey && !geminiApiKey.includes("your-gemini-api-key") && geminiApiKey.trim());
-
-    if (!hasValidHfToken && !hasValidGeminiKey) {
-      return NextResponse.json(
-        { 
-          error: "No AI provider token configured. Please add your free Hugging Face token (HF_TOKEN) from https://huggingface.co/settings/tokens to .env.local (100% free, no credit card or billing required)." 
-        },
-        { status: 500 }
-      );
-    }
 
     // 3. Parse Request & Prioritized Prompt Construction
     const body = await req.json().catch(() => ({}));
@@ -206,6 +198,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 4C. Strategy 3: Universal Free Fallback (Pollinations.ai — Zero billing, Zero API keys required)
+    if (!imageBuffer) {
+      try {
+        const seed = Math.floor(Math.random() * 999999);
+        const pollUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(literaryPrompt)}?seed=${seed}&width=1200&height=800&nologo=true`;
+        const pollRes = await fetch(pollUrl);
+        if (pollRes.ok) {
+          const arr = await pollRes.arrayBuffer();
+          imageBuffer = Buffer.from(arr);
+        }
+      } catch (pollErr: any) {
+        lastError = pollErr;
+        console.warn("Pollinations generation fallback failed:", pollErr?.message || pollErr);
+      }
+    }
+
     if (!imageBuffer) {
       let detailedMsg = "";
       if (lastError?.body) {
@@ -236,10 +244,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Server uploads image to Firebase Storage at covers/{pieceId}/{timestamp}.png
+    // 5. Optimize image buffer with sharp (WebP, max 1200x800, quality 80)
+    let optimizedBuffer: Buffer = imageBuffer;
+    try {
+      optimizedBuffer = await sharp(imageBuffer)
+        .resize(1200, 800, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer();
+    } catch (sharpErr) {
+      console.warn("Sharp optimization fallback to raw buffer:", sharpErr);
+    }
+
+    // 6. Persistence: Try Firebase Storage first (if provisioned)
     const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "friday-pages-web.firebasestorage.app";
     const cleanPieceId = (pieceId || "piece").replace(/[^a-zA-Z0-9_-]/g, "");
-    const fileName = `covers/${cleanPieceId}/${Date.now()}.png`;
+    const fileName = `covers/${cleanPieceId}/${Date.now()}.webp`;
 
     let permanentUrl: string | null = null;
 
@@ -250,10 +269,10 @@ export async function POST(req: NextRequest) {
       const storageRes = await fetch(uploadUrl, {
         method: "POST",
         headers: {
-          "Content-Type": "image/png",
+          "Content-Type": "image/webp",
           Authorization: `Bearer ${adminToken}`,
         },
-        body: new Uint8Array(imageBuffer),
+        body: new Uint8Array(optimizedBuffer),
       });
 
       if (storageRes.ok) {
@@ -261,29 +280,28 @@ export async function POST(req: NextRequest) {
         const tokenParam = storageData.downloadTokens ? `&token=${storageData.downloadTokens}` : "";
         permanentUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(fileName)}?alt=media${tokenParam}`;
       } else {
-        const storageErr = await storageRes.text().catch(() => "");
-        console.error(`Firebase Storage upload returned ${storageRes.status}:`, storageErr);
-        return NextResponse.json(
-          { error: `Firebase Storage upload failed with status ${storageRes.status}. Please check storage bucket and permissions.` },
-          { status: 502 }
-        );
+        console.warn(`Firebase Storage upload returned ${storageRes.status} for bucket "${bucket}". Falling back to Option A (optimized WebP Data URL).`);
       }
     } catch (storageException: any) {
-      console.error("Firebase Storage exception during cover upload:", storageException);
-      return NextResponse.json(
-        { error: `Firebase Storage upload error: ${storageException.message || "Failed to persist to storage"}` },
-        { status: 502 }
-      );
+      console.warn("Firebase Storage unavailable. Falling back to Option A (optimized WebP Data URL):", storageException?.message);
+    }
+
+    // 7. Option A Fallback: When Firebase Storage bucket requires Blaze plan upgrade or is not provisioned,
+    // persist as an optimized WebP Data URL directly into Firestore.
+    // Compressed size is typically ~50-80 KB, well within Firestore's 1MB document limit,
+    // requires 0 billing, 0 credit cards, and 0 external storage configuration.
+    if (!permanentUrl && optimizedBuffer) {
+      permanentUrl = `data:image/webp;base64,${optimizedBuffer.toString("base64")}`;
     }
 
     if (!permanentUrl) {
       return NextResponse.json(
-        { error: "Failed to obtain permanent download URL from Firebase Storage." },
+        { error: "Failed to persist cover image." },
         { status: 500 }
       );
     }
 
-    // 6. Return persistent download URL to client
+    // 8. Return persistent image URL to client
     return NextResponse.json({ coverImage: permanentUrl });
   } catch (err: any) {
     console.error("Generate cover route error:", err);
