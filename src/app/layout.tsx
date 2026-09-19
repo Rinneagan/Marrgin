@@ -13,8 +13,48 @@ const cormorant = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
-  title: "Marrgin",
+  metadataBase: new URL("https://marrgin.com"),
+  title: {
+    default: "Marrgin — Observing, Questioning, and Documenting Ghana",
+    template: "%s | Marrgin",
+  },
   description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_GH",
+    url: "https://marrgin.com",
+    siteName: "Marrgin",
+    title: "Marrgin — Observing, Questioning, and Documenting Ghana",
+    description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
+    images: [
+      {
+        url: "/icon.png",
+        width: 512,
+        height: 512,
+        alt: "Marrgin Editorial Publication",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Marrgin — Observing, Questioning, and Documenting Ghana",
+    description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
+    images: ["/icon.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },

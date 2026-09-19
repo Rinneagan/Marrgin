@@ -38,6 +38,8 @@ export default function CommentsSection({ poemId }: CommentsSectionProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const [honeypot, setHoneypot] = useState("");
+
   const loadComments = useCallback(async () => {
     try {
       let idToken: string | undefined = undefined;
@@ -70,9 +72,10 @@ export default function CommentsSection({ poemId }: CommentsSectionProps) {
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const created = await submitComment(poemId, clean);
+      const created = await submitComment(poemId, clean, honeypot);
       setComments((prev) => [...prev, created]);
       setNewCommentBody("");
+      setHoneypot("");
       setSuccessMessage("Comment posted.");
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
@@ -117,6 +120,20 @@ export default function CommentsSection({ poemId }: CommentsSectionProps) {
 
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="mb-12 space-y-3">
+        {/* Invisible honeypot field for automated bot protection */}
+        <div className="absolute opacity-0 pointer-events-none h-0 w-0 overflow-hidden -z-10" aria-hidden="true">
+          <label htmlFor="comment_verification_hp">Verification code</label>
+          <input
+            id="comment_verification_hp"
+            type="text"
+            name="verification_hp"
+            tabIndex={-1}
+            autoComplete="off"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+          />
+        </div>
+
         <textarea
           rows={3}
           value={newCommentBody}

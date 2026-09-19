@@ -425,6 +425,15 @@ export default function Home() {
         {/* ------------------------------------------------------------- */}
         <footer className="border-t border-gray-200/70 dark:border-gray-800/70 py-12 px-6 sm:px-8 text-center text-xs text-neutral-400 font-mono tracking-widest relative z-10">
           <p>© {new Date().getFullYear()} MARRGIN · ACCRA, GHANA</p>
+          <div className="flex items-center justify-center gap-4 mt-3 text-[11px] font-mono tracking-wider">
+            <Link href="/privacy" className="hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors">
+              Privacy Policy
+            </Link>
+            <span>·</span>
+            <Link href="/terms" className="hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors">
+              Terms & Conditions
+            </Link>
+          </div>
           <p className="text-[10px] text-neutral-500 mt-2 font-sans">Different modes. One Marrgin.</p>
         </footer>
       </div>

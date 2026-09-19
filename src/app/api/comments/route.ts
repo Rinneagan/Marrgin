@@ -65,9 +65,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const bodyJson = await req.json();
-    const { pieceId, body, visitorToken } = bodyJson;
+    const { pieceId, body, visitorToken, hp } = bodyJson;
 
-    // 1. Validate Input Structure
+    // 1. Honeypot Bot Detection
+    if (hp && typeof hp === "string" && hp.trim().length > 0) {
+      return NextResponse.json({ error: "Invalid submission" }, { status: 400 });
+    }
+
+    // 2. Validate Input Structure
     if (!pieceId || typeof pieceId !== "string" || pieceId.length > 100) {
       return NextResponse.json({ error: "Invalid pieceId" }, { status: 400 });
     }
@@ -84,6 +89,12 @@ export async function POST(req: NextRequest) {
 
     if (cleanBody.length > 1000) {
       return NextResponse.json({ error: "Comment cannot exceed 1000 characters" }, { status: 400 });
+    }
+
+    // Link spam prevention (max 2 URLs in a comment)
+    const urlMatches = cleanBody.match(/https?:\/\/[^\s]+/gi) || [];
+    if (urlMatches.length > 2) {
+      return NextResponse.json({ error: "Comments may contain at most 2 links" }, { status: 400 });
     }
 
     if (!visitorToken || typeof visitorToken !== "string" || visitorToken.trim().length < 8 || visitorToken.length > 128) {

@@ -1,4 +1,18 @@
+import type { Metadata } from "next";
 import { Feather, Wind, Shield, User, ArrowUpRight } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "The Manifesto & About",
+  description: "Marrgin is an independent publication created and edited by Ebenezer Essel — observing, questioning, and documenting the world through Ghanaian environmental reporting, evidence, personal essays, and poetry.",
+  alternates: {
+    canonical: "/about",
+  },
+  openGraph: {
+    title: "The Manifesto & About | Marrgin",
+    description: "A quiet corner of the internet for words that matter. Marrgin is an independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
+    url: "https://marrgin.com/about",
+  },
+};
 
 export default function AboutPage() {
   return (

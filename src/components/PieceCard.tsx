@@ -35,7 +35,13 @@ export default function PieceCard({ piece, children, className = "" }: PieceCard
           <div className="absolute top-0 left-0 w-full h-40 opacity-70 group-hover:opacity-85 transition-opacity z-0 overflow-hidden pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#fbf9f5]/80 to-[#fbf9f5] dark:via-[#09090b]/80 dark:to-[#09090b] z-10"></div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={piece.coverImage} alt="Cover" className="w-full h-full object-cover" />
+            <img 
+              src={piece.coverImage} 
+              alt={piece.title ? `${piece.title} cover image` : "Editorial cover photograph"} 
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover" 
+            />
           </div>
         )}
         

@@ -42,7 +42,7 @@ export async function fetchCommentsForPiece(pieceId: string, idToken?: string): 
   }
 }
 
-export async function submitComment(pieceId: string, body: string): Promise<PublicComment> {
+export async function submitComment(pieceId: string, body: string, hp?: string): Promise<PublicComment> {
   const visitorToken = getVisitorToken();
   const res = await fetch("/api/comments", {
     method: "POST",
@@ -53,6 +53,7 @@ export async function submitComment(pieceId: string, body: string): Promise<Publ
       pieceId,
       body,
       visitorToken,
+      ...(hp ? { hp } : {}),
     }),
   });
 
