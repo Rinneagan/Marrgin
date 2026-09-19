@@ -148,9 +148,6 @@ function MobileNavbarContent() {
                   >
                     MARRGIN
                   </Link>
-                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 font-serif italic">
-                    Observing, questioning, and documenting Ghana.
-                  </p>
                 </div>
                 <button 
                   onClick={() => setIsOpen(false)} 

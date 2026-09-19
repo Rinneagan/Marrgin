@@ -15,7 +15,7 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   metadataBase: new URL("https://marrgin.com"),
   title: {
-    default: "Marrgin — Observing, Questioning, and Documenting Ghana",
+    default: "Marrgin",
     template: "%s | Marrgin",
   },
   description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     locale: "en_GH",
     url: "https://marrgin.com",
     siteName: "Marrgin",
-    title: "Marrgin — Observing, Questioning, and Documenting Ghana",
+    title: "Marrgin",
     description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
     images: [
       {
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Marrgin — Observing, Questioning, and Documenting Ghana",
+    title: "Marrgin",
     description: "An independent publication observing Ghana through writing, reporting, fieldwork, and evidence.",
     images: ["/icon.png"],
   },
